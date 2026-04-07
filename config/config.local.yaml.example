@@ -1,0 +1,28 @@
+# 本地开发配置文件模板
+# 复制为 config.local.yaml 并填入真实值
+# 此文件不会被提交到 git
+
+# 数据库配置
+database:
+  password: your_database_password
+
+# JWT配置
+jwt:
+  secret: your_jwt_secret_key
+
+# 微信小程序配置
+wechat:
+  app_id: wxe45db4e24952b996
+  app_secret: your_app_secret
+
+# 短信配置 (可选)
+sms:
+  secret_id: 
+  secret_key: 
+  app_id: 
+  template_id: 
+
+# 腾讯云COS配置
+cos:
+  secret_id: your_cos_secret_id
+  secret_key: your_cos_secret_key
