@@ -175,6 +175,16 @@ func (r *ExerciseRepository) Count() (int64, error) {
 	return count, err
 }
 
+// GetTodayAllUsersExerciseCount 获取今日所有用户的锻炼记录数
+func (r *ExerciseRepository) GetTodayAllUsersExerciseCount() (int64, error) {
+	var count int64
+	today := time.Now().Format("2006-01-02")
+	err := r.db.Model(&model.UserExerciseRecord{}).
+		Where("DATE(created_at) = ?", today).
+		Count(&count).Error
+	return count, err
+}
+
 // CreateExercise 创建锻炼动作
 func (r *ExerciseRepository) CreateExercise(exercise *model.Exercise) error {
 	return r.db.Create(exercise).Error

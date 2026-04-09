@@ -158,3 +158,92 @@ func (h *CommentHandler) GetUserComments(c *gin.Context) {
 		Data:    result,
 	})
 }
+
+// GetAllComments 获取所有评论（管理后台用）
+func (h *CommentHandler) GetAllComments(c *gin.Context) {
+	status := -1
+	if statusStr := c.Query("status"); statusStr != "" {
+		status, _ = strconv.Atoi(statusStr)
+	}
+	keyword := c.Query("keyword")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+
+	result, err := h.commentService.GetAllComments(status, keyword, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    500,
+			Message: "获取评论失败",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    result,
+	})
+}
+
+// UpdateCommentStatus 更新评论状态（管理后台用）
+func (h *CommentHandler) UpdateCommentStatus(c *gin.Context) {
+	commentIDStr := c.Param("id")
+	commentID, err := strconv.ParseUint(commentIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "参数错误",
+		})
+		return
+	}
+
+	var req struct {
+		Status int `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "参数错误",
+		})
+		return
+	}
+
+	if err := h.commentService.UpdateCommentStatus(uint(commentID), req.Status); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    500,
+			Message: "更新失败",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "更新成功",
+	})
+}
+
+// AdminDeleteComment 管理员删除评论
+func (h *CommentHandler) AdminDeleteComment(c *gin.Context) {
+	commentIDStr := c.Param("id")
+	commentID, err := strconv.ParseUint(commentIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "参数错误",
+		})
+		return
+	}
+
+	if err := h.commentService.AdminDeleteComment(uint(commentID)); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    500,
+			Message: "删除失败",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "删除成功",
+	})
+}

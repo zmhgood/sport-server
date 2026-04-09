@@ -72,7 +72,7 @@ func main() {
 	commentService := service.NewCommentService(commentRepo)
 	adminService := service.NewAdminService(adminRepo, userRepo)
 	familyService := service.NewFamilyService(familyRepo)
-	goalService := service.NewGoalService(goalRepo, familyRepo)
+	goalService := service.NewGoalService(goalRepo, familyRepo, exerciseRepo)
 	systemService := service.NewSystemService(systemRepo)
 
 	// 初始化Handler

@@ -133,3 +133,36 @@ func (r *CommentRepository) GetCommentCount(exerciseID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
+
+// GetAllComments 获取所有评论（管理后台用）
+func (r *CommentRepository) GetAllComments(status int, keyword string, page, pageSize int) ([]model.Comment, int64, error) {
+	var comments []model.Comment
+	var total int64
+
+	query := r.db.Model(&model.Comment{}).Preload("User").Preload("Exercise")
+
+	if status >= 0 {
+		query = query.Where("status = ?", status)
+	}
+	if keyword != "" {
+		query = query.Where("content LIKE ?", "%"+keyword+"%")
+	}
+
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&comments).Error
+	return comments, total, err
+}
+
+// UpdateStatus 更新评论状态
+func (r *CommentRepository) UpdateStatus(id uint, status int) error {
+	return r.db.Model(&model.Comment{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// Count 获取评论总数
+func (r *CommentRepository) Count() (int64, error) {
+	var count int64
+	err := r.db.Model(&model.Comment{}).Count(&count).Error
+	return count, err
+}

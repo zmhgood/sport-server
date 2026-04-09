@@ -9,14 +9,16 @@ import (
 )
 
 type GoalService struct {
-	goalRepo   *repository.GoalRepository
-	familyRepo *repository.FamilyRepository
+	goalRepo     *repository.GoalRepository
+	familyRepo   *repository.FamilyRepository
+	exerciseRepo *repository.ExerciseRepository
 }
 
-func NewGoalService(goalRepo *repository.GoalRepository, familyRepo *repository.FamilyRepository) *GoalService {
+func NewGoalService(goalRepo *repository.GoalRepository, familyRepo *repository.FamilyRepository, exerciseRepo *repository.ExerciseRepository) *GoalService {
 	return &GoalService{
-		goalRepo:   goalRepo,
-		familyRepo: familyRepo,
+		goalRepo:     goalRepo,
+		familyRepo:   familyRepo,
+		exerciseRepo: exerciseRepo,
 	}
 }
 
@@ -386,6 +388,20 @@ func (s *GoalService) CompleteExercise(goalID, userID uint, input CompleteExerci
 	if err := s.goalRepo.UpdateCompletion(completion); err != nil {
 		return errors.New("更新完成记录失败: " + err.Error())
 	}
+
+	// 创建用户锻炼记录（用于统计）
+	record := &model.UserExerciseRecord{
+		UserID:      userID,
+		ExerciseID:  goalEx.ExerciseID,
+		Duration:    goalEx.Reps * input.CompletedSets * 30, // 估算时长：次数×组数×30秒
+		Sets:        input.CompletedSets,
+		CompletedAt: time.Now(),
+	}
+	if err := s.exerciseRepo.CreateExerciseRecord(record); err != nil {
+		// 记录错误但不影响主流程
+		// 可以添加日志记录
+	}
+
 	return nil
 }
 

@@ -230,7 +230,11 @@ func (s *UserService) GetComments(page, pageSize int, status *int, keyword strin
 	if s.commentRepo == nil {
 		return nil, 0, nil
 	}
-	return s.commentRepo.GetByExerciseID(0, page, pageSize) // 简化实现
+	statusVal := -1
+	if status != nil {
+		statusVal = *status
+	}
+	return s.commentRepo.GetAllComments(statusVal, keyword, page, pageSize)
 }
 
 // UpdateCommentStatus 更新评论状态
@@ -389,11 +393,13 @@ type DailyStat struct {
 func (s *UserService) GetDashboardStats() (*DashboardStats, error) {
 	userCount, _ := s.userRepo.Count()
 	exerciseCount, _ := s.exerciseRepo.Count()
+	commentCount, _ := s.commentRepo.Count()
+	todayRecordCount, _ := s.exerciseRepo.GetTodayAllUsersExerciseCount()
 	
 	return &DashboardStats{
-		UserCount:       userCount,
-		ExerciseCount:   exerciseCount,
-		CommentCount:    0,
-		TodayRecordCount: 0,
+		UserCount:        userCount,
+		ExerciseCount:    exerciseCount,
+		CommentCount:     commentCount,
+		TodayRecordCount: todayRecordCount,
 	}, nil
 }

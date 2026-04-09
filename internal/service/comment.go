@@ -176,3 +176,28 @@ func (s *CommentService) GetUserComments(userID uint, page, pageSize int) (*Comm
 		PageSize: pageSize,
 	}, nil
 }
+
+// GetAllComments 获取所有评论（管理后台用）
+func (s *CommentService) GetAllComments(status int, keyword string, page, pageSize int) (*CommentListResult, error) {
+	comments, total, err := s.commentRepo.GetAllComments(status, keyword, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CommentListResult{
+		List:     comments,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+// UpdateCommentStatus 更新评论状态
+func (s *CommentService) UpdateCommentStatus(commentID uint, status int) error {
+	return s.commentRepo.UpdateStatus(commentID, status)
+}
+
+// AdminDeleteComment 管理员删除评论
+func (s *CommentService) AdminDeleteComment(commentID uint) error {
+	return s.commentRepo.Delete(commentID)
+}
