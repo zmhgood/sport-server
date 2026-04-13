@@ -61,7 +61,8 @@ type Exercise struct {
 	Reps          string         `json:"reps"`                      // 次数
 	Calories      int            `json:"calories"`                  // 消耗热量
 	ImageURL      string         `json:"image_url" gorm:"size:255"`
-	VideoURL      string         `json:"video_url" gorm:"size:255"`
+	GifURL        string         `json:"gif_url" gorm:"size:255"`
+	VideoURL      string         `json:"video_url" gorm:"size:255"` // 保留兼容性
 	Sort          int            `json:"sort" gorm:"default:0"`
 	MuscleGroup   MuscleGroup    `json:"muscle_group" gorm:"foreignKey:MuscleGroupID"`
 	Steps         []ExerciseStep `json:"steps" gorm:"foreignKey:ExerciseID"`

@@ -203,6 +203,7 @@ func (r *ExerciseRepository) UpdateExercise(exercise *model.Exercise) error {
 		"reps":            exercise.Reps,
 		"calories":        exercise.Calories,
 		"image_url":       exercise.ImageURL,
+		"gif_url":         exercise.GifURL,
 		"video_url":       exercise.VideoURL,
 		"sort":            exercise.Sort,
 	}).Error
