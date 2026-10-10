@@ -85,9 +85,7 @@ func LoadConfig(configPath string) error {
 		return fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	// 调试输出
-	fmt.Printf("加载配置成功: WeChat.AppID=%s, WeChat.AppSecret=%s\n", 
-		AppConfig.WeChat.AppID, AppConfig.WeChat.AppSecret)
+	fmt.Println("加载配置成功")
 
 	return nil
 }

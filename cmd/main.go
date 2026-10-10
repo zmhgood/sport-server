@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"elderly-fitness/config"
 	"elderly-fitness/internal/handler"
@@ -96,9 +97,7 @@ func main() {
 	api := r.Group("/api")
 	{
 		// 公开路由 - 认证
-		api.POST("/auth/login", authHandler.Login)           // 微信登录
-		api.POST("/auth/sms-login", authHandler.SMSLogin)    // 短信登录
-		api.POST("/auth/send-code", authHandler.SendSMSCode) // 发送验证码
+		api.POST("/auth/login", authHandler.Login) // 微信登录
 
 		// 管理员登录
 		api.POST("/admin/login", adminHandler.AdminLogin)
@@ -114,14 +113,14 @@ func main() {
 		// 系统配置 - 公开
 		api.GET("/configs", systemHandler.GetConfigs)
 
+		// 用户和管理员均可上传文件
+		api.POST("/upload/image", middleware.UploadAuthMiddleware(), uploadHandler.UploadImage)
+		api.POST("/upload/video", middleware.UploadAuthMiddleware(), uploadHandler.UploadVideo)
+
 		// 需要认证的路由
 		authGroup := api.Group("")
 		authGroup.Use(middleware.AuthMiddleware())
 		{
-			// 文件上传
-			authGroup.POST("/upload/image", uploadHandler.UploadImage)
-			authGroup.POST("/upload/video", uploadHandler.UploadVideo)
-
 			// 用户信息
 			authGroup.GET("/user/info", authHandler.GetUserInfo)
 			authGroup.PUT("/user/info", authHandler.UpdateUserInfo)
@@ -141,34 +140,34 @@ func main() {
 			authGroup.POST("/comments/:id/like", commentHandler.ToggleLike)
 
 			// 家庭相关
-			authGroup.POST("/family", familyHandler.CreateFamily)              // 创建家庭
-			authGroup.POST("/family/join", familyHandler.JoinFamily)           // 加入家庭
-			authGroup.GET("/families", familyHandler.GetMyFamilies)            // 获取我的所有家庭
-			authGroup.GET("/family/:id", familyHandler.GetFamily)              // 获取指定家庭信息
-			authGroup.GET("/family/members", familyHandler.GetFamilyMembers)   // 获取家庭成员
-			authGroup.POST("/family/leave", familyHandler.LeaveFamily)         // 退出家庭
-			authGroup.POST("/family/remove", familyHandler.RemoveMember)       // 移除成员
-			authGroup.POST("/family/transfer", familyHandler.TransferAdmin)    // 转移管理员
-			authGroup.POST("/family/invite-code/refresh", familyHandler.RefreshInviteCode) // 刷新邀请码
+			authGroup.POST("/family", familyHandler.CreateFamily)                                                      // 创建家庭
+			authGroup.POST("/family/join", familyHandler.JoinFamily)                                                   // 加入家庭
+			authGroup.GET("/families", familyHandler.GetMyFamilies)                                                    // 获取我的所有家庭
+			authGroup.GET("/family/:id", middleware.FamilyAccessMiddleware(false), familyHandler.GetFamily)            // 获取指定家庭信息
+			authGroup.GET("/family/members", middleware.FamilyAccessMiddleware(false), familyHandler.GetFamilyMembers) // 获取家庭成员
+			authGroup.POST("/family/leave", familyHandler.LeaveFamily)                                                 // 退出家庭
+			authGroup.POST("/family/remove", familyHandler.RemoveMember)                                               // 移除成员
+			authGroup.POST("/family/transfer", familyHandler.TransferAdmin)                                            // 转移管理员
+			authGroup.POST("/family/invite-code/refresh", familyHandler.RefreshInviteCode)                             // 刷新邀请码
 
 			// 目标相关 - 注意：固定路径必须在参数路径之前
-			authGroup.POST("/goals", goalHandler.CreateGoal)                   // 创建目标
-			authGroup.GET("/goals", goalHandler.GetMyGoals)                    // 获取我的目标
-			authGroup.GET("/goals/families", goalHandler.GetUserFamiliesWithGoals) // 获取用户所有家庭及目标（必须在 :id 之前）
-			authGroup.GET("/goals/family", goalHandler.GetFamilyGoals)         // 获取家庭目标（必须在 :id 之前）
-			authGroup.GET("/goals/:id/progress", goalHandler.GetGoalProgress)  // 获取目标进度（必须在 :id 之前）
-			authGroup.GET("/goals/:id/history", goalHandler.GetGoalHistory)    // 获取历史记录（必须在 :id 之前）
-			authGroup.POST("/goals/:id/members", goalHandler.AddGoalMember)    // 添加目标成员
-			authGroup.POST("/goals/:id/exercises", goalHandler.AddGoalExercise) // 添加目标动作
-			authGroup.POST("/goals/:id/complete", goalHandler.CompleteExercise) // 完成动作
-			authGroup.GET("/goals/:id", goalHandler.GetGoal)                   // 获取目标详情（必须在所有 /goals/:id/xxx 之后）
-			authGroup.PUT("/goals/:id", goalHandler.UpdateGoal)                // 更新目标
-			authGroup.DELETE("/goals/:id", goalHandler.DeleteGoal)             // 删除目标
+			authGroup.POST("/goals", goalHandler.CreateGoal)                                                           // 创建目标
+			authGroup.GET("/goals", goalHandler.GetMyGoals)                                                            // 获取我的目标
+			authGroup.GET("/goals/families", goalHandler.GetUserFamiliesWithGoals)                                     // 获取用户所有家庭及目标（必须在 :id 之前）
+			authGroup.GET("/goals/family", middleware.FamilyAccessMiddleware(false), goalHandler.GetFamilyGoals)       // 获取家庭目标（必须在 :id 之前）
+			authGroup.GET("/goals/:id/progress", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoalProgress) // 获取目标进度（必须在 :id 之前）
+			authGroup.GET("/goals/:id/history", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoalHistory)   // 获取历史记录（必须在 :id 之前）
+			authGroup.POST("/goals/:id/members", goalHandler.AddGoalMember)                                            // 添加目标成员
+			authGroup.POST("/goals/:id/exercises", goalHandler.AddGoalExercise)                                        // 添加目标动作
+			authGroup.POST("/goals/:id/complete", goalHandler.CompleteExercise)                                        // 完成动作
+			authGroup.GET("/goals/:id", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoal)                  // 获取目标详情（必须在所有 /goals/:id/xxx 之后）
+			authGroup.PUT("/goals/:id", goalHandler.UpdateGoal)                                                        // 更新目标
+			authGroup.DELETE("/goals/:id", goalHandler.DeleteGoal)                                                     // 删除目标
 		}
 
 		// 管理后台路由 - 需要管理员认证
 		adminGroup := api.Group("/admin")
-		adminGroup.Use(middleware.AuthMiddleware())
+		adminGroup.Use(middleware.AdminAuthMiddleware())
 		{
 			adminGroup.GET("/info", adminHandler.GetAdminInfo)
 			adminGroup.GET("/users", adminHandler.GetUsers)
@@ -210,14 +209,18 @@ func initDefaultAdmin(db *gorm.DB) {
 	var count int64
 	db.Model(&model.Admin{}).Count(&count)
 	if count == 0 {
+		initialPassword := os.Getenv("ADMIN_INITIAL_PASSWORD")
+		if initialPassword == "" {
+			log.Fatal("首次初始化管理员需要设置 ADMIN_INITIAL_PASSWORD")
+		}
 		adminService := service.NewAdminService(
 			repository.NewAdminRepository(db),
 			repository.NewUserRepository(db),
 		)
-		if err := adminService.CreateAdmin("admin", "admin123", "管理员"); err != nil {
+		if err := adminService.CreateAdmin("admin", initialPassword, "管理员"); err != nil {
 			log.Printf("创建默认管理员失败: %v", err)
 		} else {
-			log.Println("默认管理员账号创建成功: admin / admin123")
+			log.Println("管理员账号创建成功")
 		}
 	}
 }

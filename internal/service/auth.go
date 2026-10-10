@@ -75,12 +75,9 @@ func (s *AuthService) getWeChatOpenID(code string) (string, string, error) {
 		code,
 	)
 
-	// 调试输出
-	fmt.Printf("微信登录请求URL: %s\n", url)
-
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", "", err
+		return "", "", errors.New("请求微信登录服务失败")
 	}
 	defer resp.Body.Close()
 
@@ -88,8 +85,6 @@ func (s *AuthService) getWeChatOpenID(code string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-
-	fmt.Printf("微信API响应: %s\n", string(body))
 
 	var result struct {
 		OpenID     string `json:"openid"`

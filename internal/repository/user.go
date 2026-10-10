@@ -19,11 +19,17 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 
 // Create 创建用户
 func (r *UserRepository) Create(user *model.User) error {
+	if user.Phone == "" {
+		return r.db.Omit("Phone").Create(user).Error
+	}
 	return r.db.Create(user).Error
 }
 
 // Update 更新用户
 func (r *UserRepository) Update(user *model.User) error {
+	if user.Phone == "" {
+		return r.db.Omit("Phone").Save(user).Error
+	}
 	return r.db.Save(user).Error
 }
 
@@ -248,7 +254,7 @@ func (r *UserRepository) GetWeekCompletions(userID uint, startDate string) ([]Go
 // GetEarliestExerciseDate 获取用户最早的锻炼记录日期
 func (r *UserRepository) GetEarliestExerciseDate(userID uint) (string, error) {
 	var earliestDate string
-	
+
 	// 从 goal_completions 表获取最早记录
 	err := r.db.Table("goal_completions gc").
 		Select("MIN(DATE(gc.date))").
@@ -259,6 +265,6 @@ func (r *UserRepository) GetEarliestExerciseDate(userID uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	return earliestDate, nil
 }

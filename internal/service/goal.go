@@ -24,9 +24,9 @@ func NewGoalService(goalRepo *repository.GoalRepository, familyRepo *repository.
 
 // CreateGoalInput 创建目标输入
 type CreateGoalInput struct {
-	Name        string                  `json:"name"`
-	MemberIDs   []uint                  `json:"member_ids"`
-	Exercises   []GoalExerciseInput     `json:"exercises"`
+	Name      string              `json:"name"`
+	MemberIDs []uint              `json:"member_ids"`
+	Exercises []GoalExerciseInput `json:"exercises"`
 }
 
 // GoalExerciseInput 目标动作输入
@@ -42,6 +42,14 @@ func (s *GoalService) CreateGoal(familyID, creatorID uint, input CreateGoalInput
 	isMember, _ := s.familyRepo.IsMember(familyID, creatorID)
 	if !isMember {
 		return nil, errors.New("无权限操作")
+	}
+
+	// 验证所有目标成员属于当前家庭，避免跨家庭关联用户。
+	for _, memberID := range input.MemberIDs {
+		member, err := s.familyRepo.IsMember(familyID, memberID)
+		if err != nil || !member {
+			return nil, errors.New("目标成员必须属于当前家庭")
+		}
 	}
 
 	goal := &model.DailyGoal{
@@ -125,7 +133,7 @@ func (s *GoalService) GetUserGoalsWithProgress(userID uint) ([]GoalWithProgress,
 		// 直接使用已预加载的数据计算进度
 		var todayCompleted int
 		var totalExercises int
-		
+
 		// 找到当前用户在目标中的成员记录
 		for _, member := range goal.Members {
 			if member.UserID == userID {
@@ -135,7 +143,7 @@ func (s *GoalService) GetUserGoalsWithProgress(userID uint) ([]GoalWithProgress,
 				for _, c := range completions {
 					completionMap[c.GoalExerciseID] = c
 				}
-				
+
 				// 计算已完成的动作数
 				totalExercises = len(goal.Exercises)
 				for _, ex := range goal.Exercises {
@@ -172,9 +180,9 @@ type GoalWithProgress struct {
 
 // FamilyWithGoals 家庭及其目标信息
 type FamilyWithGoals struct {
-	FamilyID     uint              `json:"family_id"`
-	FamilyName   string            `json:"family_name"`
-	Goals        []GoalWithProgress `json:"goals"`
+	FamilyID   uint               `json:"family_id"`
+	FamilyName string             `json:"family_name"`
+	Goals      []GoalWithProgress `json:"goals"`
 }
 
 // GetUserFamiliesWithGoals 获取用户所有家庭及其目标
@@ -242,9 +250,9 @@ func (s *GoalService) GetUserFamiliesWithGoals(userID uint) ([]FamilyWithGoals, 
 		}
 
 		result = append(result, FamilyWithGoals{
-			FamilyID:     family.ID,
-			FamilyName:   family.Name,
-			Goals:        familyGoals,
+			FamilyID:   family.ID,
+			FamilyName: family.Name,
+			Goals:      familyGoals,
 		})
 	}
 
@@ -415,15 +423,15 @@ type GoalProgress struct {
 
 // MemberProgress 成员进度
 type MemberProgress struct {
-	UserID         uint                `json:"user_id"`
-	UserName       string              `json:"user_name"`
-	UserAvatar     string              `json:"user_avatar"`
-	ExerciseStats  []ExerciseProgress  `json:"exercise_stats"`
-	CompletedCount int                 `json:"completed_count"` // 已完成的动作数
-	TotalCount     int                 `json:"total_count"`     // 总动作数
-	TotalSets      int                 `json:"total_sets"`      // 总组数
-	CompletedSets  int                 `json:"completed_sets"`  // 已完成组数
-	Progress       int                 `json:"progress"`        // 百分比（基于组数计算）
+	UserID         uint               `json:"user_id"`
+	UserName       string             `json:"user_name"`
+	UserAvatar     string             `json:"user_avatar"`
+	ExerciseStats  []ExerciseProgress `json:"exercise_stats"`
+	CompletedCount int                `json:"completed_count"` // 已完成的动作数
+	TotalCount     int                `json:"total_count"`     // 总动作数
+	TotalSets      int                `json:"total_sets"`      // 总组数
+	CompletedSets  int                `json:"completed_sets"`  // 已完成组数
+	Progress       int                `json:"progress"`        // 百分比（基于组数计算）
 }
 
 // ExerciseProgress 动作进度
