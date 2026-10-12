@@ -111,7 +111,9 @@ func (r *FamilyRepository) ListAll(page, pageSize int) ([]model.Family, int64, e
 	r.db.Model(&model.Family{}).Count(&total)
 
 	offset := (page - 1) * pageSize
-	err := r.db.Preload("Members").
+	err := r.db.Preload("Members.User", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id", "nick_name")
+	}).
 		Order("created_at DESC").
 		Offset(offset).Limit(pageSize).
 		Find(&families).Error
