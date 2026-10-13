@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	driver "github.com/go-sql-driver/mysql"
+	"gorm.io/gorm"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"elderly-fitness/config"
 	"elderly-fitness/internal/model"
@@ -44,16 +48,24 @@ func (s *AuthService) WeChatLogin(code string) (*WeChatLoginResult, error) {
 
 	// 查找或创建用户
 	user, err := s.userRepo.FindByOpenID(openID)
-	if err != nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// 用户不存在，创建新用户
 		user = &model.User{
 			OpenID: openID,
 		}
-		if err := s.userRepo.Create(user); err != nil {
-			return nil, errors.New("创建用户失败")
+		if err = s.userRepo.Create(user); err != nil {
+			if e, ok := err.(*driver.MySQLError); ok && e.Number == 1062 {
+				user, err = s.userRepo.FindByOpenID(openID)
+			}
+			if err != nil {
+				return nil, errors.New("创建用户失败")
+			}
 		}
 	}
 
+	if err != nil {
+		return nil, errors.New("用户读取失败，请重试")
+	}
 	// 生成JWT token
 	token, err := s.generateToken(user.ID)
 	if err != nil {
@@ -75,7 +87,7 @@ func (s *AuthService) getWeChatOpenID(code string) (string, string, error) {
 		code,
 	)
 
-	resp, err := http.Get(url)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Get(url)
 	if err != nil {
 		return "", "", errors.New("请求微信登录服务失败")
 	}
@@ -101,6 +113,9 @@ func (s *AuthService) getWeChatOpenID(code string) (string, string, error) {
 		return "", "", fmt.Errorf("微信登录失败: %s", result.ErrMsg)
 	}
 
+	if result.OpenID == "" {
+		return "", "", errors.New("微信登录响应无效")
+	}
 	return result.OpenID, result.SessionKey, nil
 }
 
@@ -123,36 +138,66 @@ func (s *AuthService) GetUserByID(id uint) (*model.User, error) {
 
 // UserInfoUpdate 用户信息更新
 type UserInfoUpdate struct {
-	NickName     string
-	AvatarURL    string
-	Age          int
-	Phone        string
-	HealthStatus string
+	NickName     *string  `json:"nick_name"`
+	AvatarURL    *string  `json:"avatar_url"`
+	Gender       *int     `json:"gender"`
+	Age          *int     `json:"age"`
+	Height       *int     `json:"height"`
+	Weight       *float64 `json:"weight"`
+	Phone        *string  `json:"phone"`
+	HealthStatus *string  `json:"health_status"`
 }
 
-// UpdateUserInfo 更新用户信息
 func (s *AuthService) UpdateUserInfo(userID uint, update *UserInfoUpdate) error {
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		return err
 	}
-
-	if update.NickName != "" {
-		user.NickName = update.NickName
+	if update.NickName != nil {
+		name := strings.TrimSpace(*update.NickName)
+		if utf8.RuneCountInString(name) > 64 {
+			return errors.New("昵称太长")
+		}
+		if name != "" {
+			user.NickName = name
+		}
 	}
-	if update.AvatarURL != "" {
-		user.AvatarURL = update.AvatarURL
+	if update.AvatarURL != nil && *update.AvatarURL != "" {
+		user.AvatarURL = *update.AvatarURL
 	}
-	if update.Age > 0 {
-		user.Age = update.Age
+	if update.Gender != nil {
+		if *update.Gender < 0 || *update.Gender > 2 {
+			return errors.New("性别参数无效")
+		}
+		user.Gender = *update.Gender
 	}
-	if update.Phone != "" {
-		user.Phone = update.Phone
+	if update.Age != nil {
+		if *update.Age < 0 || *update.Age > 150 {
+			return errors.New("年龄参数无效")
+		}
+		user.Age = *update.Age
 	}
-	if update.HealthStatus != "" {
-		user.HealthStatus = update.HealthStatus
+	if update.Height != nil {
+		if *update.Height != 0 && (*update.Height < 50 || *update.Height > 250) {
+			return errors.New("身高参数无效")
+		}
+		user.Height = *update.Height
 	}
-
+	if update.Weight != nil {
+		if *update.Weight != 0 && (*update.Weight < 20 || *update.Weight > 300) {
+			return errors.New("体重参数无效")
+		}
+		user.Weight = *update.Weight
+	}
+	if update.Phone != nil && *update.Phone != "" {
+		user.Phone = *update.Phone
+	}
+	if update.HealthStatus != nil {
+		if utf8.RuneCountInString(*update.HealthStatus) > 2000 {
+			return errors.New("健康状况内容太长")
+		}
+		user.HealthStatus = *update.HealthStatus
+	}
 	return s.userRepo.Update(user)
 }
 

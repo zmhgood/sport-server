@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"elderly-fitness/internal/model"
 	"elderly-fitness/internal/repository"
@@ -19,7 +21,11 @@ func NewFamilyService(familyRepo *repository.FamilyRepository) *FamilyService {
 }
 
 // CreateFamily 创建家庭
-func (s *FamilyService) CreateFamily(name string, creatorID uint) (*model.Family, error) {
+func (s *FamilyService) CreateFamily(name string, creatorID uint, requestKeys ...string) (*model.Family, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > 64 {
+		return nil, errors.New("家庭名称须为1至64个字")
+	}
 	// 生成邀请码
 	inviteCode, err := s.generateInviteCode()
 	if err != nil {
@@ -32,19 +38,15 @@ func (s *FamilyService) CreateFamily(name string, creatorID uint) (*model.Family
 		InviteCode: inviteCode,
 	}
 
-	if err := s.familyRepo.Create(family); err != nil {
-		return nil, err
+	if len(requestKeys) > 0 && requestKeys[0] != "" {
+		if len(requestKeys[0]) > 64 {
+			return nil, errors.New("创建请求标识无效")
+		}
+		family.RequestKey = &requestKeys[0]
 	}
 
-	// 创建者成为管理员
-	member := &model.FamilyMember{
-		FamilyID: family.ID,
-		UserID:   creatorID,
-		Role:     "admin",
-		JoinedAt: time.Now(),
-	}
-	if err := s.familyRepo.AddMember(member); err != nil {
-		return nil, err
+	if err := s.familyRepo.CreateWithAdmin(family, creatorID); err != nil {
+		return nil, errors.New("创建家庭失败，请重试")
 	}
 
 	return s.familyRepo.FindByID(family.ID)
@@ -52,29 +54,30 @@ func (s *FamilyService) CreateFamily(name string, creatorID uint) (*model.Family
 
 // JoinFamily 加入家庭
 func (s *FamilyService) JoinFamily(inviteCode string, userID uint) (*model.Family, error) {
-	// 查找家庭
+	inviteCode = strings.ToLower(strings.TrimSpace(inviteCode))
+	if len(inviteCode) != 6 {
+		return nil, errors.New("邀请码无效")
+	}
 	family, err := s.familyRepo.FindByInviteCode(inviteCode)
 	if err != nil {
 		return nil, errors.New("邀请码无效")
 	}
-
-	// 检查是否已是成员
-	isMember, _ := s.familyRepo.IsMember(family.ID, userID)
-	if isMember {
-		return nil, errors.New("您已是该家庭成员")
-	}
-
-	// 加入家庭
-	member := &model.FamilyMember{
-		FamilyID: family.ID,
-		UserID:   userID,
-		Role:     "member",
-		JoinedAt: time.Now(),
-	}
-	if err := s.familyRepo.AddMember(member); err != nil {
+	err = s.familyRepo.Transaction(func(tx *repository.FamilyRepository) error {
+		current, err := tx.LockFamily(family.ID)
+		if err != nil || current.InviteCode != inviteCode {
+			return errors.New("邀请码无效")
+		}
+		if err := tx.AddMember(&model.FamilyMember{FamilyID: family.ID, UserID: userID, Role: "member", JoinedAt: time.Now()}); err != nil {
+			if errors.Is(err, repository.ErrAlreadyMember) {
+				return err
+			}
+			return errors.New("加入家庭失败，请重试")
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
 	return s.familyRepo.FindByID(family.ID)
 }
 
@@ -100,51 +103,67 @@ func (s *FamilyService) GetFamilyMembers(familyID uint) ([]model.FamilyMember, e
 
 // LeaveFamily 退出家庭
 func (s *FamilyService) LeaveFamily(familyID, userID uint) error {
-	// 检查是否是家庭成员
-	member, err := s.familyRepo.GetMemberByFamilyAndUser(familyID, userID)
-	if err != nil {
-		return errors.New("您不是该家庭成员")
-	}
-
-	if member.Role == "admin" {
-		// 检查是否还有其他成员
-		members, _ := s.familyRepo.GetMembers(familyID)
-		if len(members) > 1 {
-			return errors.New("请先转移管理员权限或移除其他成员")
+	return s.familyRepo.Transaction(func(tx *repository.FamilyRepository) error {
+		if _, err := tx.LockFamily(familyID); err != nil {
+			return errors.New("家庭不存在")
 		}
-		// 最后一个成员，删除家庭
-		return s.familyRepo.Delete(familyID)
-	}
-
-	return s.familyRepo.RemoveMember(familyID, userID)
+		member, err := tx.GetMemberByFamilyAndUser(familyID, userID)
+		if err != nil {
+			return errors.New("您不是该家庭成员")
+		}
+		if member.Role == "admin" {
+			members, err := tx.GetMembers(familyID)
+			if err != nil {
+				return err
+			}
+			if len(members) > 1 {
+				return errors.New("请先转移管理员权限或移除其他成员")
+			}
+			if err := tx.RemoveMember(familyID, userID); err != nil {
+				return err
+			}
+			return tx.Delete(familyID)
+		}
+		return tx.RemoveMember(familyID, userID)
+	})
 }
 
-// RemoveMember 移除成员（管理员操作）
 func (s *FamilyService) RemoveMember(familyID, adminID, memberID uint) error {
-	// 检查操作者是否是该家庭的管理员
-	adminMember, err := s.familyRepo.GetMemberByFamilyAndUser(familyID, adminID)
-	if err != nil || adminMember.Role != "admin" {
-		return errors.New("无权限操作")
+	if adminID == memberID {
+		return errors.New("不能移除自己，请使用退出家庭")
 	}
-
-	return s.familyRepo.RemoveMember(familyID, memberID)
+	return s.familyRepo.Transaction(func(tx *repository.FamilyRepository) error {
+		if _, err := tx.LockFamily(familyID); err != nil {
+			return errors.New("家庭不存在")
+		}
+		admin, err := tx.GetMemberByFamilyAndUser(familyID, adminID)
+		if err != nil || admin.Role != "admin" {
+			return errors.New("无权限操作")
+		}
+		return tx.RemoveMember(familyID, memberID)
+	})
 }
 
-// TransferAdmin 转移管理员权限
 func (s *FamilyService) TransferAdmin(familyID, currentAdminID, newAdminID uint) error {
-	// 检查当前用户是否是该家庭的管理员
-	adminMember, err := s.familyRepo.GetMemberByFamilyAndUser(familyID, currentAdminID)
-	if err != nil || adminMember.Role != "admin" {
-		return errors.New("无权限操作")
-	}
-
-	// 将新管理员设为admin
-	if err := s.familyRepo.UpdateMemberRole(familyID, newAdminID, "admin"); err != nil {
-		return err
-	}
-
-	// 将当前管理员设为member
-	return s.familyRepo.UpdateMemberRole(familyID, currentAdminID, "member")
+	return s.familyRepo.Transaction(func(tx *repository.FamilyRepository) error {
+		if _, err := tx.LockFamily(familyID); err != nil {
+			return errors.New("家庭不存在")
+		}
+		admin, err := tx.GetMemberByFamilyAndUser(familyID, currentAdminID)
+		if err != nil || admin.Role != "admin" {
+			return errors.New("无权限操作")
+		}
+		if _, err := tx.GetMemberByFamilyAndUser(familyID, newAdminID); err != nil {
+			return errors.New("新管理员必须是有效家庭成员")
+		}
+		if currentAdminID == newAdminID {
+			return nil
+		}
+		if err := tx.UpdateMemberRole(familyID, newAdminID, "admin"); err != nil {
+			return err
+		}
+		return tx.UpdateMemberRole(familyID, currentAdminID, "member")
+	})
 }
 
 // GenerateNewInviteCode 生成新的邀请码
@@ -174,8 +193,8 @@ func (s *FamilyService) GenerateNewInviteCode(familyID, userID uint) (string, er
 }
 
 // ListAllFamilies 列出所有家庭（管理后台用）
-func (s *FamilyService) ListAllFamilies(page, pageSize int) ([]model.Family, int64, error) {
-	return s.familyRepo.ListAll(page, pageSize)
+func (s *FamilyService) ListAllFamilies(page, pageSize int, keywords ...string) ([]model.Family, int64, error) {
+	return s.familyRepo.ListAll(page, pageSize, keywords...)
 }
 
 // generateInviteCode 生成邀请码

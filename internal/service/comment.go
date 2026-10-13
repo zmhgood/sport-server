@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"strings"
+	"unicode/utf8"
 
 	"elderly-fitness/internal/model"
 	"elderly-fitness/internal/repository"
@@ -30,13 +32,17 @@ type CreateCommentRequest struct {
 // CreateComment 创建评论
 func (s *CommentService) CreateComment(userID uint, req *CreateCommentRequest) (*model.Comment, error) {
 	// 验证内容
+	req.Content = strings.TrimSpace(req.Content)
 	if len(req.Content) == 0 {
 		return nil, errors.New("评论内容不能为空")
 	}
-	if len(req.Content) > 500 {
+	if utf8.RuneCountInString(req.Content) > 500 {
 		return nil, errors.New("评论内容不能超过500字")
 	}
 
+	if err := s.commentRepo.ValidateReferences(req.ExerciseID, req.ParentID); err != nil {
+		return nil, err
+	}
 	// 处理图片
 	var imagesJSON string
 	if len(req.Images) > 0 {
@@ -110,56 +116,15 @@ type CommentListResult struct {
 
 // LikeComment 点赞评论
 func (s *CommentService) LikeComment(commentID, userID uint) error {
-	// 检查评论是否存在
-	_, err := s.commentRepo.GetByID(commentID)
-	if err != nil {
-		return errors.New("评论不存在")
-	}
-
-	// 检查是否已点赞
-	hasLiked, err := s.commentRepo.HasLiked(commentID, userID)
-	if err != nil {
-		return err
-	}
-	if hasLiked {
-		return errors.New("已点赞过")
-	}
-
-	// 创建点赞记录
-	like := &model.CommentLike{
-		CommentID: commentID,
-		UserID:    userID,
-	}
-	if err := s.commentRepo.CreateLike(like); err != nil {
-		return err
-	}
-
-	// 增加点赞数
-	return s.commentRepo.IncrementLikeCount(commentID)
+	_, err := s.commentRepo.ChangeLike(commentID, userID, true, false)
+	return err
 }
-
-// UnlikeComment 取消点赞
 func (s *CommentService) UnlikeComment(commentID, userID uint) error {
-	// 删除点赞记录
-	if err := s.commentRepo.DeleteLike(commentID, userID); err != nil {
-		return err
-	}
-
-	// 减少点赞数
-	return s.commentRepo.DecrementLikeCount(commentID)
+	_, err := s.commentRepo.ChangeLike(commentID, userID, false, false)
+	return err
 }
-
-// ToggleLike 切换点赞状态
 func (s *CommentService) ToggleLike(commentID, userID uint) (bool, error) {
-	hasLiked, err := s.commentRepo.HasLiked(commentID, userID)
-	if err != nil {
-		return false, err
-	}
-
-	if hasLiked {
-		return false, s.UnlikeComment(commentID, userID)
-	}
-	return true, s.LikeComment(commentID, userID)
+	return s.commentRepo.ChangeLike(commentID, userID, false, true)
 }
 
 // GetUserComments 获取用户的评论

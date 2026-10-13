@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm/logger"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,7 +29,7 @@ func TestFamilyAccessIntegration(t *testing.T) {
 		t.Fatal("cannot load test configuration")
 	}
 	cfg := config.AppConfig.Database
-	if cfg.Host != "127.0.0.1" && cfg.Host != "localhost" {
+	if (cfg.Host != "127.0.0.1" && cfg.Host != "localhost") || !strings.HasPrefix(cfg.DBName, "sport_qa_") {
 		t.Fatal("integration test requires local database")
 	}
 	db, err := gorm.Open(mysql.Open(cfg.GetDSN()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

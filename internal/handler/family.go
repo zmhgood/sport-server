@@ -19,7 +19,8 @@ func NewFamilyHandler(familyService *service.FamilyService) *FamilyHandler {
 
 // CreateFamilyRequest 创建家庭请求
 type CreateFamilyRequest struct {
-	Name string `json:"name" binding:"required"`
+	RequestID string `json:"request_id"`
+	Name      string `json:"name" binding:"required"`
 }
 
 // CreateFamily 创建家庭
@@ -32,7 +33,7 @@ func (h *FamilyHandler) CreateFamily(c *gin.Context) {
 		return
 	}
 
-	family, err := h.familyService.CreateFamily(req.Name, userID.(uint))
+	family, err := h.familyService.CreateFamily(req.Name, userID.(uint), req.RequestID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: err.Error()})
 		return
@@ -71,7 +72,7 @@ func (h *FamilyHandler) GetMyFamilies(c *gin.Context) {
 
 	families, err := h.familyService.GetFamiliesByUserID(userID.(uint))
 	if err != nil {
-		c.JSON(http.StatusOK, Response{Code: 0, Message: "暂未加入家庭", Data: []interface{}{}})
+		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: "家庭加载失败，请重试"})
 		return
 	}
 
@@ -234,7 +235,7 @@ func (h *FamilyHandler) ListFamiliesForAdmin(c *gin.Context) {
 		pageSize = 20
 	}
 
-	families, total, err := h.familyService.ListAllFamilies(page, pageSize)
+	families, total, err := h.familyService.ListAllFamilies(page, pageSize, c.Query("keyword"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: "获取失败"})
 		return

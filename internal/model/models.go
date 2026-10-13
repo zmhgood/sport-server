@@ -14,6 +14,8 @@ type User struct {
 	NickName     string         `json:"nick_name" gorm:"size:64"`
 	AvatarURL    string         `json:"avatar_url" gorm:"size:255"`
 	Gender       int            `json:"gender"` // 0:未知 1:男 2:女
+	Height       int            `json:"height"`
+	Weight       float64        `json:"weight"`
 	Age          int            `json:"age"`
 	Phone        string         `json:"phone" gorm:"size:20;uniqueIndex"`
 	HealthStatus string         `json:"health_status" gorm:"type:text"` // 健康状况备注
@@ -37,15 +39,15 @@ type MuscleGroup struct {
 
 // Muscle 肌肉
 type Muscle struct {
-	ID             uint           `json:"id" gorm:"primaryKey"`
-	MuscleGroupID  uint           `json:"muscle_group_id" gorm:"index"`
-	Name           string         `json:"name" gorm:"size:32;not null"`
-	Description    string         `json:"description" gorm:"size:255"`
-	ImageURL       string         `json:"image_url" gorm:"size:255"`
-	MuscleGroup    MuscleGroup    `json:"muscle_group" gorm:"foreignKey:MuscleGroupID"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+	ID            uint           `json:"id" gorm:"primaryKey"`
+	MuscleGroupID uint           `json:"muscle_group_id" gorm:"index"`
+	Name          string         `json:"name" gorm:"size:32;not null"`
+	Description   string         `json:"description" gorm:"size:255"`
+	ImageURL      string         `json:"image_url" gorm:"size:255"`
+	MuscleGroup   MuscleGroup    `json:"muscle_group" gorm:"foreignKey:MuscleGroupID"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // Exercise 锻炼动作
@@ -111,45 +113,48 @@ type ExercisePrecaution struct {
 
 // UserExerciseRecord 用户锻炼记录
 type UserExerciseRecord struct {
-	ID          uint           `json:"id" gorm:"primaryKey"`
-	UserID      uint           `json:"user_id" gorm:"index"`
-	ExerciseID  uint           `json:"exercise_id" gorm:"index"`
-	Duration    int            `json:"duration"` // 秒
-	Sets        int            `json:"sets"`     // 完成组数
-	CompletedAt time.Time      `json:"completed_at"`
-	User        User           `json:"user" gorm:"foreignKey:UserID"`
-	Exercise    Exercise       `json:"exercise" gorm:"foreignKey:ExerciseID"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	ID           uint           `json:"id" gorm:"primaryKey"`
+	CompletionID *uint          `json:"-" gorm:"uniqueIndex:idx_record_completion"`
+	UserID       uint           `json:"user_id" gorm:"index"`
+	ExerciseID   uint           `json:"exercise_id" gorm:"index"`
+	Duration     int            `json:"duration"` // 秒
+	Sets         int            `json:"sets"`     // 完成组数
+	CompletedAt  time.Time      `json:"completed_at"`
+	User         User           `json:"user" gorm:"foreignKey:UserID"`
+	Exercise     Exercise       `json:"exercise" gorm:"foreignKey:ExerciseID"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // UserDailyStats 用户每日统计
 type UserDailyStats struct {
-	ID             uint           `json:"id" gorm:"primaryKey"`
-	UserID         uint           `json:"user_id" gorm:"uniqueIndex:idx_user_date"`
-	Date           time.Time      `json:"date" gorm:"type:date;uniqueIndex:idx_user_date"`
-	ExerciseCount  int            `json:"exercise_count"`
-	TotalDuration  int            `json:"total_duration"` // 秒
-	TotalCalories  int            `json:"total_calories"`
-	User           User           `json:"user" gorm:"foreignKey:UserID"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+	ID            uint           `json:"id" gorm:"primaryKey"`
+	UserID        uint           `json:"user_id" gorm:"uniqueIndex:idx_user_date"`
+	Date          time.Time      `json:"date" gorm:"type:date;uniqueIndex:idx_user_date"`
+	ExerciseCount int            `json:"exercise_count"`
+	TotalDuration int            `json:"total_duration"` // 秒
+	TotalCalories int            `json:"total_calories"`
+	User          User           `json:"user" gorm:"foreignKey:UserID"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // ================== 家庭功能相关模型 ==================
 
 // Family 家庭
 type Family struct {
-	ID          uint           `json:"id" gorm:"primaryKey"`
-	Name        string         `json:"name" gorm:"size:64;not null"`
-	CreatorID   uint           `json:"creator_id" gorm:"index"`
-	InviteCode  string         `json:"invite_code" gorm:"size:16;uniqueIndex"`
-	Members     []FamilyMember `json:"members" gorm:"foreignKey:FamilyID"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	RequestKey *string        `json:"-" gorm:"size:64;uniqueIndex:idx_family_create_request"`
+	Creator    User           `json:"creator" gorm:"foreignKey:CreatorID"`
+	ID         uint           `json:"id" gorm:"primaryKey"`
+	Name       string         `json:"name" gorm:"size:64;not null"`
+	CreatorID  uint           `json:"creator_id" gorm:"index;uniqueIndex:idx_family_create_request"`
+	InviteCode string         `json:"invite_code" gorm:"size:16;uniqueIndex"`
+	Members    []FamilyMember `json:"members" gorm:"foreignKey:FamilyID"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // FamilyMember 家庭成员
@@ -157,7 +162,7 @@ type FamilyMember struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
 	FamilyID  uint           `json:"family_id" gorm:"index;uniqueIndex:idx_family_user"`
 	UserID    uint           `json:"user_id" gorm:"index;uniqueIndex:idx_family_user"`
-	Nickname  string         `json:"nickname" gorm:"size:32"` // 家庭内昵称
+	Nickname  string         `json:"nickname" gorm:"size:32"`              // 家庭内昵称
 	Role      string         `json:"role" gorm:"size:16;default:'member'"` // admin/member
 	JoinedAt  time.Time      `json:"joined_at"`
 	User      User           `json:"user" gorm:"foreignKey:UserID"`
@@ -168,58 +173,59 @@ type FamilyMember struct {
 
 // DailyGoal 每日目标
 type DailyGoal struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	FamilyID  uint           `json:"family_id" gorm:"index"`
-	Name      string         `json:"name" gorm:"size:64;not null"`
-	CreatedBy uint           `json:"created_by" gorm:"index"`
-	IsActive  bool           `json:"is_active" gorm:"default:true"`
-	Family    Family         `json:"family" gorm:"foreignKey:FamilyID"`
-	Members   []GoalMember   `json:"members" gorm:"foreignKey:GoalID"`
-	Exercises []GoalExercise `json:"exercises" gorm:"foreignKey:GoalID"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	RequestKey *string        `json:"-" gorm:"size:64;uniqueIndex:idx_goal_create_request"`
+	ID         uint           `json:"id" gorm:"primaryKey"`
+	FamilyID   uint           `json:"family_id" gorm:"index"`
+	Name       string         `json:"name" gorm:"size:64;not null"`
+	CreatedBy  uint           `json:"created_by" gorm:"index;uniqueIndex:idx_goal_create_request"`
+	IsActive   bool           `json:"is_active" gorm:"default:true"`
+	Family     Family         `json:"family" gorm:"foreignKey:FamilyID"`
+	Members    []GoalMember   `json:"members" gorm:"foreignKey:GoalID"`
+	Exercises  []GoalExercise `json:"exercises" gorm:"foreignKey:GoalID"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // GoalMember 目标成员(参与该目标的家庭成员)
 type GoalMember struct {
-	ID          uint              `json:"id" gorm:"primaryKey"`
-	GoalID      uint              `json:"goal_id" gorm:"index;uniqueIndex:idx_goal_member"`
-	UserID      uint              `json:"user_id" gorm:"index;uniqueIndex:idx_goal_member"`
-	User        User              `json:"user" gorm:"foreignKey:UserID"`
-	Completions []GoalCompletion  `json:"completions" gorm:"foreignKey:GoalMemberID"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt    `json:"-" gorm:"index"`
+	ID          uint             `json:"id" gorm:"primaryKey"`
+	GoalID      uint             `json:"goal_id" gorm:"index;uniqueIndex:idx_goal_member"`
+	UserID      uint             `json:"user_id" gorm:"index;uniqueIndex:idx_goal_member"`
+	User        User             `json:"user" gorm:"foreignKey:UserID"`
+	Completions []GoalCompletion `json:"completions" gorm:"foreignKey:GoalMemberID"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt   `json:"-" gorm:"index"`
 }
 
 // GoalExercise 目标动作
 type GoalExercise struct {
-	ID          uint              `json:"id" gorm:"primaryKey"`
-	GoalID      uint              `json:"goal_id" gorm:"index"`
-	ExerciseID  uint              `json:"exercise_id" gorm:"index"`
-	Sets        int               `json:"sets"`       // 要求组数
-	Reps        int               `json:"reps"`       // 每组次数
-	Exercise    Exercise          `json:"exercise" gorm:"foreignKey:ExerciseID"`
-	Completions []GoalCompletion  `json:"completions" gorm:"foreignKey:GoalExerciseID"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt    `json:"-" gorm:"index"`
+	ID          uint             `json:"id" gorm:"primaryKey"`
+	GoalID      uint             `json:"goal_id" gorm:"index"`
+	ExerciseID  uint             `json:"exercise_id" gorm:"index"`
+	Sets        int              `json:"sets"` // 要求组数
+	Reps        int              `json:"reps"` // 每组次数
+	Exercise    Exercise         `json:"exercise" gorm:"foreignKey:ExerciseID"`
+	Completions []GoalCompletion `json:"completions" gorm:"foreignKey:GoalExerciseID"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt   `json:"-" gorm:"index"`
 }
 
 // GoalCompletion 目标完成记录
 type GoalCompletion struct {
-	ID              uint           `json:"id" gorm:"primaryKey"`
-	GoalMemberID    uint           `json:"goal_member_id" gorm:"index"`
-	GoalExerciseID  uint           `json:"goal_exercise_id" gorm:"index"`
-	Date            time.Time      `json:"date" gorm:"type:date;index"`
-	CompletedSets   int            `json:"completed_sets"`   // 已完成组数
-	Status          string         `json:"status" gorm:"size:16;default:'pending'"` // pending/done
-	GoalMember      GoalMember     `json:"goal_member" gorm:"foreignKey:GoalMemberID"`
-	GoalExercise    GoalExercise   `json:"goal_exercise" gorm:"foreignKey:GoalExerciseID"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `json:"-" gorm:"index"`
+	ID             uint           `json:"id" gorm:"primaryKey"`
+	GoalMemberID   uint           `json:"goal_member_id" gorm:"index"`
+	GoalExerciseID uint           `json:"goal_exercise_id" gorm:"index"`
+	Date           time.Time      `json:"date" gorm:"type:date;index"`
+	CompletedSets  int            `json:"completed_sets"`                          // 已完成组数
+	Status         string         `json:"status" gorm:"size:16;default:'pending'"` // pending/done
+	GoalMember     GoalMember     `json:"goal_member" gorm:"foreignKey:GoalMemberID"`
+	GoalExercise   GoalExercise   `json:"goal_exercise" gorm:"foreignKey:GoalExerciseID"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // SystemConfig 系统配置

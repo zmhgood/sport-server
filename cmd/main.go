@@ -125,6 +125,7 @@ func main() {
 			authGroup.GET("/user/info", authHandler.GetUserInfo)
 			authGroup.PUT("/user/info", authHandler.UpdateUserInfo)
 			authGroup.GET("/user/statistics", userHandler.GetStatistics)
+			authGroup.GET("/user/statistics/by-family", userHandler.GetFamilyStatistics)
 			authGroup.GET("/user/history", userHandler.GetHistory)
 			authGroup.GET("/user/today-progress", userHandler.GetTodayProgress)
 			authGroup.GET("/user/week-stats", userHandler.GetWeekStats)

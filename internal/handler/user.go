@@ -49,7 +49,7 @@ func (h *UserHandler) GetHistory(c *gin.Context) {
 	// 获取分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	
+
 	log.Printf("[GetHistory] userID=%v, page=%d, pageSize=%d", userID, page, pageSize)
 
 	history, total, err := h.userService.GetExerciseHistoryPaginated(userID.(uint), page, pageSize)
@@ -148,4 +148,13 @@ func (h *UserHandler) GetWeekStats(c *gin.Context) {
 			"serverVersion": serverVersion,
 		},
 	})
+}
+
+func (h *UserHandler) GetFamilyStatistics(c *gin.Context) {
+	rows, err := h.userService.GetFamilyStatistics(c.GetUint("userID"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: "家庭统计加载失败"})
+		return
+	}
+	c.JSON(http.StatusOK, Response{Code: 0, Message: "success", Data: rows})
 }

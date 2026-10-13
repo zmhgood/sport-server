@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"elderly-fitness/config"
@@ -41,6 +42,12 @@ func NewUploadHandler() *UploadHandler {
 
 // UploadFile 上传文件
 func (h *UploadHandler) UploadFile(c *gin.Context) {
+	kind := c.DefaultQuery("type", "image")
+	limit := int64(6 << 20)
+	if kind == "video" {
+		limit = 101 << 20
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -55,7 +62,7 @@ func (h *UploadHandler) UploadFile(c *gin.Context) {
 	fileType := c.DefaultQuery("type", "image")
 
 	// 验证文件类型
-	ext := filepath.Ext(header.Filename)
+	ext := strings.ToLower(filepath.Ext(header.Filename))
 	allowedImageExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
 	allowedVideoExts := map[string]bool{".mp4": true, ".mov": true, ".avi": true, ".mkv": true}
 
@@ -74,6 +81,10 @@ func (h *UploadHandler) UploadFile(c *gin.Context) {
 		return
 	}
 
+	if err := validateUpload(file, header.Size, fileType, ext); err != nil {
+		c.JSON(http.StatusBadRequest, Response{Code: 400, Message: err.Error()})
+		return
+	}
 	// 生成文件路径：uploads/images/2024/01/01/xxx.jpg
 	datePath := time.Now().Format("2006/01/02")
 	fileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
@@ -84,7 +95,7 @@ func (h *UploadHandler) UploadFile(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    500,
-			Message: "上传失败：" + err.Error(),
+			Message: "上传失败，请重试",
 		})
 		return
 	}

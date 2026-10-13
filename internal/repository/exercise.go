@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"time"
+	"elderly-fitness/pkg/clock"
 
 	"elderly-fitness/internal/model"
 
@@ -121,16 +121,16 @@ func (r *ExerciseRepository) CreateExerciseRecord(record *model.UserExerciseReco
 		}
 
 		// 更新每日统计
-		today := time.Now().Format("2006-01-02")
+		today := clock.Now().Format("2006-01-02")
 		var stats model.UserDailyStats
 		err := tx.Where("user_id = ? AND date = ?", record.UserID, today).
 			First(&stats).Error
-		
+
 		if err == gorm.ErrRecordNotFound {
 			// 创建新的统计
 			stats = model.UserDailyStats{
 				UserID:        record.UserID,
-				Date:          time.Now(),
+				Date:          clock.Now(),
 				ExerciseCount: 1,
 				TotalDuration: record.Duration,
 				TotalCalories: 0, // TODO: 根据锻炼计算
@@ -177,12 +177,8 @@ func (r *ExerciseRepository) Count() (int64, error) {
 
 // GetTodayAllUsersExerciseCount 获取今日所有用户的锻炼记录数
 func (r *ExerciseRepository) GetTodayAllUsersExerciseCount() (int64, error) {
-	var count int64
-	today := time.Now().Format("2006-01-02")
-	err := r.db.Model(&model.UserExerciseRecord{}).
-		Where("DATE(created_at) = ?", today).
-		Count(&count).Error
-	return count, err
+	n, err := NewUserRepository(r.db).completedToday(clock.Now().Format("2006-01-02"), nil)
+	return int64(n), err
 }
 
 // CreateExercise 创建锻炼动作

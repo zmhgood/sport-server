@@ -3,7 +3,10 @@ package repository
 import (
 	"elderly-fitness/internal/model"
 
+	"errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"time"
 )
 
 type FamilyRepository struct {
@@ -27,7 +30,7 @@ func (r *FamilyRepository) Update(family *model.Family) error {
 // FindByID 根据ID查找家庭
 func (r *FamilyRepository) FindByID(id uint) (*model.Family, error) {
 	var family model.Family
-	err := r.db.Preload("Members.User").First(&family, id).Error
+	err := r.db.Preload("Creator", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name") }).Preload("Members.User", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name", "avatar_url") }).First(&family, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +60,8 @@ func (r *FamilyRepository) FindByUserID(userID uint) ([]model.Family, error) {
 		family, err := r.FindByID(member.FamilyID)
 		if err == nil {
 			families = append(families, *family)
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
 		}
 	}
 	return families, nil
@@ -73,8 +78,62 @@ func (r *FamilyRepository) FindOneByUserID(userID uint) (*model.Family, error) {
 }
 
 // AddMember 添加家庭成员
+var ErrAlreadyMember = errors.New("您已是该家庭成员")
+
 func (r *FamilyRepository) AddMember(member *model.FamilyMember) error {
+	var previous model.FamilyMember
+	err := r.db.Unscoped().Where("family_id = ? AND user_id = ?", member.FamilyID, member.UserID).First(&previous).Error
+	if err == nil {
+		if !previous.DeletedAt.Valid {
+			return ErrAlreadyMember
+		}
+		member.ID = previous.ID
+		return r.db.Unscoped().Model(&previous).Updates(map[string]interface{}{
+			"deleted_at": nil, "role": member.Role, "joined_at": member.JoinedAt,
+		}).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
 	return r.db.Create(member).Error
+}
+
+func (r *FamilyRepository) Transaction(fn func(*FamilyRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error { return fn(NewFamilyRepository(tx)) })
+}
+
+func (r *FamilyRepository) LockFamily(id uint) (*model.Family, error) {
+	var family model.Family
+	err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).First(&family, id).Error
+	return &family, err
+}
+
+func (r *FamilyRepository) CreateWithAdmin(family *model.Family, userID uint) error {
+	return r.Transaction(func(tx *FamilyRepository) error {
+		var user model.User
+		if err := tx.db.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, userID).Error; err != nil {
+			return err
+		}
+		if family.RequestKey != nil {
+			var old model.Family
+			err := tx.db.Unscoped().Where("creator_id=? AND request_key=?", userID, *family.RequestKey).First(&old).Error
+			if err == nil {
+				member, e := tx.IsMember(old.ID, userID)
+				if old.DeletedAt.Valid || e != nil || !member {
+					return errors.New("原创建结果已失效")
+				}
+				*family = old
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		if err := tx.Create(family); err != nil {
+			return err
+		}
+		return tx.AddMember(&model.FamilyMember{FamilyID: family.ID, UserID: userID, Role: "admin", JoinedAt: time.Now()})
+	})
 }
 
 // RemoveMember 移除家庭成员
@@ -104,15 +163,21 @@ func (r *FamilyRepository) GetMemberByFamilyAndUser(familyID, userID uint) (*mod
 }
 
 // ListAll 列出所有家庭（管理后台用）
-func (r *FamilyRepository) ListAll(page, pageSize int) ([]model.Family, int64, error) {
+func (r *FamilyRepository) ListAll(page, pageSize int, keywords ...string) ([]model.Family, int64, error) {
 	var families []model.Family
 	var total int64
 
-	r.db.Model(&model.Family{}).Count(&total)
+	query := r.db.Model(&model.Family{})
+	if len(keywords) > 0 && keywords[0] != "" {
+		query = query.Where("name LIKE ?", "%"+keywords[0]+"%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	offset := (page - 1) * pageSize
-	err := r.db.Preload("Members.User", func(db *gorm.DB) *gorm.DB {
-		return db.Select("id", "nick_name")
+	err := query.Preload("Creator", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name") }).Preload("Members.User", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id", "nick_name", "avatar_url")
 	}).
 		Order("created_at DESC").
 		Offset(offset).Limit(pageSize).
@@ -125,7 +190,7 @@ func (r *FamilyRepository) ListAll(page, pageSize int) ([]model.Family, int64, e
 func (r *FamilyRepository) GetMembers(familyID uint) ([]model.FamilyMember, error) {
 	var members []model.FamilyMember
 	err := r.db.Where("family_id = ?", familyID).
-		Preload("User").
+		Preload("User", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name", "avatar_url") }).
 		Order("joined_at ASC").
 		Find(&members).Error
 	return members, err

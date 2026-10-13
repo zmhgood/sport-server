@@ -2,6 +2,7 @@ package repository
 
 import (
 	"elderly-fitness/internal/model"
+	"errors"
 
 	"gorm.io/gorm"
 )
@@ -157,7 +158,14 @@ func (r *CommentRepository) GetAllComments(status int, keyword string, page, pag
 
 // UpdateStatus 更新评论状态
 func (r *CommentRepository) UpdateStatus(id uint, status int) error {
-	return r.db.Model(&model.Comment{}).Where("id = ?", id).Update("status", status).Error
+	if status != 0 && status != 1 {
+		return errors.New("评论状态无效")
+	}
+	var comment model.Comment
+	if err := r.db.First(&comment, id).Error; err != nil {
+		return errors.New("评论不存在")
+	}
+	return r.db.Model(&comment).Update("status", status).Error
 }
 
 // Count 获取评论总数

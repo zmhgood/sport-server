@@ -59,9 +59,9 @@ type SMSConfig struct {
 }
 
 type COSConfig struct {
-	BucketURL  string `mapstructure:"bucket_url"`
-	SecretID   string `mapstructure:"secret_id"`
-	SecretKey  string `mapstructure:"secret_key"`
+	BucketURL string `mapstructure:"bucket_url"`
+	SecretID  string `mapstructure:"secret_id"`
+	SecretKey string `mapstructure:"secret_key"`
 }
 
 var AppConfig *Config
@@ -92,7 +92,7 @@ func LoadConfig(configPath string) error {
 
 // GetDSN 获取数据库连接字符串
 func (c *DatabaseConfig) GetDSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Asia%%2FShanghai",
 		c.User, c.Password, c.Host, c.Port, c.DBName)
 }
 

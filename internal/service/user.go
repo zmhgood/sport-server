@@ -1,6 +1,7 @@
 package service
 
 import (
+	"elderly-fitness/pkg/clock"
 	"fmt"
 	"log"
 	"sort"
@@ -48,7 +49,7 @@ type ExerciseHistory struct {
 	GoalName     string         `json:"goal_name"`
 	Exercises    []ExerciseItem `json:"exercises"`
 	Duration     int            `json:"duration"`
-	Progress     int            `json:"progress"`     // 完成进度百分比
+	Progress     int            `json:"progress"`      // 完成进度百分比
 	CompletedNum int            `json:"completed_num"` // 已完成动作数
 	TotalNum     int            `json:"total_num"`     // 总动作数
 }
@@ -64,7 +65,7 @@ func (s *UserService) GetExerciseHistory(userID uint, limit int) ([]ExerciseHist
 	// 获取用户目标完成记录（带目标信息）
 	goalCompletions, err := s.userRepo.GetUserGoalCompletionsWithGoal(userID, limit)
 	if err != nil {
-		goalCompletions = []repository.GoalCompletionWithGoal{}
+		return nil, err
 	}
 	log.Printf("[GetExerciseHistory] 用户 %d 的目标完成记录数: %d", userID, len(goalCompletions))
 
@@ -96,7 +97,9 @@ func (s *UserService) GetExerciseHistory(userID uint, limit int) ([]ExerciseHist
 				ID:   completion.ExerciseID,
 				Name: completion.ExerciseName,
 			})
-			historyMap[key].CompletedNum++
+			if completion.TargetSets > 0 && completion.CompletedSets >= completion.TargetSets {
+				historyMap[key].CompletedNum++
+			}
 		}
 		// 目标完成按每组30秒估算
 		historyMap[key].Duration += completion.CompletedSets * 30
@@ -127,12 +130,18 @@ func (s *UserService) GetExerciseHistory(userID uint, limit int) ([]ExerciseHist
 
 // GetExerciseHistoryPaginated 获取锻炼历史（分页）
 func (s *UserService) GetExerciseHistoryPaginated(userID uint, page, pageSize int) ([]ExerciseHistory, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
 	log.Printf("[GetExerciseHistoryPaginated] userID=%d, page=%d, pageSize=%d", userID, page, pageSize)
 
 	// 获取所有目标完成记录（设置一个较大的 limit）
-	goalCompletions, err := s.userRepo.GetUserGoalCompletionsWithGoal(userID, 1000)
+	goalCompletions, err := s.userRepo.GetUserGoalCompletionsWithGoal(userID, 0)
 	if err != nil {
-		goalCompletions = []repository.GoalCompletionWithGoal{}
+		return nil, 0, err
 	}
 	log.Printf("[GetExerciseHistoryPaginated] GetUserGoalCompletionsWithGoal count: %d", len(goalCompletions))
 
@@ -163,14 +172,15 @@ func (s *UserService) GetExerciseHistoryPaginated(userID uint, page, pageSize in
 				ID:   completion.ExerciseID,
 				Name: completion.ExerciseName,
 			})
-			historyMap[key].CompletedNum++
+			if completion.TargetSets > 0 && completion.CompletedSets >= completion.TargetSets {
+				historyMap[key].CompletedNum++
+			}
 		}
 		historyMap[key].Duration += completion.CompletedSets * 30
 		if historyMap[key].TotalNum > 0 {
 			historyMap[key].Progress = historyMap[key].CompletedNum * 100 / historyMap[key].TotalNum
 		}
 	}
-
 
 	// 转换为切片并排序
 	result := make([]ExerciseHistory, 0, len(historyMap))
@@ -208,7 +218,7 @@ type TodayProgress struct {
 
 // GetTodayProgress 获取今日进度
 func (s *UserService) GetTodayProgress(userID uint) (*TodayProgress, error) {
-	today := time.Now().Format("2006-01-02")
+	today := clock.Now().Format("2006-01-02")
 	count, err := s.userRepo.GetUserTodayGoalCompletionCount(userID, today)
 	if err != nil {
 		return nil, err
@@ -244,7 +254,7 @@ func (s *UserService) UpdateCommentStatus(id uint, status int) error {
 	}
 	comment := &model.Comment{Status: status}
 	comment.ID = id
-	return s.commentRepo.Update(comment)
+	return s.commentRepo.UpdateStatus(comment.ID, comment.Status)
 }
 
 // DeleteComment 删除评论
@@ -257,26 +267,26 @@ func (s *UserService) DeleteComment(id uint) error {
 
 // DashboardStats 仪表盘统计
 type DashboardStats struct {
-	UserCount       int64 `json:"userCount"`
-	ExerciseCount   int64 `json:"exerciseCount"`
-	CommentCount    int64 `json:"commentCount"`
+	UserCount        int64 `json:"userCount"`
+	ExerciseCount    int64 `json:"exerciseCount"`
+	CommentCount     int64 `json:"commentCount"`
 	TodayRecordCount int64 `json:"todayRecordCount"`
 }
 
 // WeekStatsResult 周统计结果
 type WeekStatsResult struct {
-	Stats       []DailyStat `json:"stats"`
-	WeekRange   string      `json:"weekRange"`
-	StartDate   string      `json:"startDate"`
-	WeekOffset  int         `json:"weekOffset"`
-	CanGoPrev   bool        `json:"canGoPrev"`  // 是否可以向左滑动（查看更早的周）
-	CanGoNext   bool        `json:"canGoNext"`  // 是否可以向右滑动（查看更新的周）
+	Stats      []DailyStat `json:"stats"`
+	WeekRange  string      `json:"weekRange"`
+	StartDate  string      `json:"startDate"`
+	WeekOffset int         `json:"weekOffset"`
+	CanGoPrev  bool        `json:"canGoPrev"` // 是否可以向左滑动（查看更早的周）
+	CanGoNext  bool        `json:"canGoNext"` // 是否可以向右滑动（查看更新的周）
 }
 
 // GetWeekStats 获取一周锻炼统计
 func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResult, error) {
 	// 获取指定周的数据，从周一开始
-	now := time.Now()
+	now := clock.Now()
 	weekday := int(now.Weekday())
 	if weekday == 0 {
 		weekday = 7
@@ -323,7 +333,7 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 		dateStr := c.Date.Format("2006-01-02")
 		if stat, ok := dailyMap[dateStr]; ok {
 			// 累计锻炼分钟数（按组数估算）
-			stat.Minutes += c.CompletedSets * 30 / 60 // 每组30秒，转为分钟
+			stat.Minutes += c.CompletedSets * 30 // 每组30秒，转为分钟
 
 			// 统计当天完成组数
 			stat.Count += c.CompletedSets
@@ -347,6 +357,7 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 	result := make([]DailyStat, 0, 7)
 	for i := 0; i < 7; i++ {
 		date := monday.AddDate(0, 0, i).Format("2006-01-02")
+		dailyMap[date].Minutes /= 60
 		result = append(result, *dailyMap[date])
 	}
 
@@ -358,12 +369,12 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 	// 判断是否可以继续滑动
 	// canGoNext: 只有当前周的offset < 0时，才能向右滑动（回到未来/本周）
 	canGoNext := weekOffset < 0
-	
+
 	// canGoPrev: 允许向过去滑动，但最多回看2年（方便测试）
-	twoYearsAgo := time.Now().AddDate(-2, 0, 0).Format("2006-01-02")
+	twoYearsAgo := clock.Now().AddDate(-2, 0, 0).Format("2006-01-02")
 	canGoPrev := startDate > twoYearsAgo
 
-	log.Printf("[GetWeekStats] weekOffset=%d, startDate=%s, twoYearsAgo=%s, canGoPrev=%v, canGoNext=%v", 
+	log.Printf("[GetWeekStats] weekOffset=%d, startDate=%s, twoYearsAgo=%s, canGoPrev=%v, canGoNext=%v",
 		weekOffset, startDate, twoYearsAgo, canGoPrev, canGoNext)
 
 	return &WeekStatsResult{
@@ -395,11 +406,15 @@ func (s *UserService) GetDashboardStats() (*DashboardStats, error) {
 	exerciseCount, _ := s.exerciseRepo.Count()
 	commentCount, _ := s.commentRepo.Count()
 	todayRecordCount, _ := s.exerciseRepo.GetTodayAllUsersExerciseCount()
-	
+
 	return &DashboardStats{
 		UserCount:        userCount,
 		ExerciseCount:    exerciseCount,
 		CommentCount:     commentCount,
 		TodayRecordCount: todayRecordCount,
 	}, nil
+}
+
+func (s *UserService) GetFamilyStatistics(userID uint) ([]repository.FamilyStatistics, error) {
+	return s.userRepo.GetFamilyStatistics(userID)
 }

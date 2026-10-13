@@ -44,6 +44,12 @@ func (h *ExerciseHandler) GetMuscleGroups(c *gin.Context) {
 func (h *ExerciseHandler) GetExercises(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
 	muscleGroupIDStr := c.Query("muscle_group_id")
 	difficulty := c.Query("difficulty")
 	keyword := c.Query("keyword")
@@ -108,7 +114,7 @@ func (h *ExerciseHandler) GetExerciseDetail(c *gin.Context) {
 // GetRecommendExercises 获取推荐锻炼
 func (h *ExerciseHandler) GetRecommendExercises(c *gin.Context) {
 	userID, _ := c.Get("userID")
-	
+
 	exercises, err := h.exerciseService.GetRecommendExercises(userID.(uint))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{

@@ -176,13 +176,7 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 func (h *AuthHandler) UpdateUserInfo(c *gin.Context) {
 	userID, _ := c.Get("userID")
 
-	var req struct {
-		NickName     string `json:"nick_name"`
-		AvatarURL    string `json:"avatar_url"`
-		Age          int    `json:"age"`
-		Phone        string `json:"phone"`
-		HealthStatus string `json:"health_status"`
-	}
+	var req service.UserInfoUpdate
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -192,13 +186,7 @@ func (h *AuthHandler) UpdateUserInfo(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.UpdateUserInfo(userID.(uint), &service.UserInfoUpdate{
-		NickName:     req.NickName,
-		AvatarURL:    req.AvatarURL,
-		Age:          req.Age,
-		Phone:        req.Phone,
-		HealthStatus: req.HealthStatus,
-	}); err != nil {
+	if err := h.authService.UpdateUserInfo(userID.(uint), &req); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    500,
 			Message: "更新失败",
