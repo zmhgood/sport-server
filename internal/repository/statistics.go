@@ -45,7 +45,7 @@ type FamilyStatistics struct {
 }
 
 func (r *UserRepository) GetFamilyStatistics(userID uint) ([]FamilyStatistics, error) {
-	var result []FamilyStatistics
+	result := make([]FamilyStatistics, 0)
 	err := r.completionQuery().Joins("JOIN families f ON f.id=g.family_id").Where("gm.user_id=? AND gc.completed_sets>0", userID).
 		Select(`f.id family_id,f.name family_name,COUNT(DISTINCT gc.date) total_days,SUM(gc.completed_sets) total_sets,
   SUM(CASE WHEN gc.completed_sets=ge.sets THEN 1 ELSE 0 END) completed_exercises,

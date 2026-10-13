@@ -67,6 +67,18 @@ func TestProfileHTTPPersistenceAndFamilyFailure(t *testing.T) {
 	if body.Code != 0 || body.Data.Height != 171 || body.Data.Weight != 66.5 || body.Data.Gender != 2 || body.Data.NickName != "Synthetic HTTP" {
 		t.Fatal("HTTP contract did not persist profile")
 	}
+
+	uh := NewUserHandler(service.NewUserService(ur, repository.NewExerciseRepository(db)))
+	r.GET("/user/statistics/by-family", uh.GetFamilyStatistics)
+	response = httptest.NewRecorder()
+	r.ServeHTTP(response, httptest.NewRequest("GET", "/user/statistics/by-family", nil))
+	var familyStats struct {
+		Code int
+		Data []repository.FamilyStatistics
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &familyStats); err != nil || response.Code != 200 || familyStats.Code != 0 || familyStats.Data == nil || len(familyStats.Data) != 0 {
+		t.Fatal("empty family statistics must be a successful JSON array, not null")
+	}
 	fh := NewFamilyHandler(service.NewFamilyService(repository.NewFamilyRepository(db)))
 	r.GET("/families", fh.GetMyFamilies)
 	conn.Close()
