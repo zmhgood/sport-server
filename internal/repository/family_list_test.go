@@ -48,7 +48,7 @@ func TestListAllLoadsCreatorName(t *testing.T) {
 	if err := tx.Create(&family).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.Create(&model.FamilyMember{FamilyID: family.ID, UserID: user.ID, Role: "admin"}).Error; err != nil {
+	if err := tx.Create(&model.FamilyMember{FamilyID: family.ID, UserID: user.ID, Role: "admin", JoinedAt: time.Now()}).Error; err != nil {
 		t.Fatal(err)
 	}
 
