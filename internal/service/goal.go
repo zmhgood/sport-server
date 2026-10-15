@@ -5,6 +5,7 @@ import (
 	"errors"
 	"gorm.io/gorm"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"elderly-fitness/internal/model"
@@ -27,10 +28,12 @@ func NewGoalService(goalRepo *repository.GoalRepository, familyRepo *repository.
 
 // CreateGoalInput 创建目标输入
 type CreateGoalInput struct {
-	RequestID string              `json:"request_id"`
-	Name      string              `json:"name"`
-	MemberIDs []uint              `json:"member_ids"`
-	Exercises []GoalExerciseInput `json:"exercises"`
+	PlanType   string              `json:"plan_type"`
+	ExecutorID uint                `json:"executor_id"`
+	RequestID  string              `json:"request_id"`
+	Name       string              `json:"name"`
+	MemberIDs  []uint              `json:"member_ids"`
+	Exercises  []GoalExerciseInput `json:"exercises"`
 }
 
 // GoalExerciseInput 目标动作输入
@@ -50,27 +53,45 @@ func (s *GoalService) CreateGoal(familyID, creatorID uint, input CreateGoalInput
 	if err != nil || !member {
 		return nil, errors.New("无权限操作")
 	}
-	ids := []uint{creatorID}
-	seen := map[uint]bool{creatorID: true}
+	planType := input.PlanType
+	if planType == "" {
+		planType = "shared"
+	}
+	if planType != "shared" && planType != "personal" {
+		return nil, errors.New("计划类型无效")
+	}
+	ids := make([]uint, 0)
+	if planType == "personal" {
+		if input.ExecutorID == 0 {
+			return nil, errors.New("请选择执行者")
+		}
+		ids = append(ids, input.ExecutorID)
+	} else {
+		if input.ExecutorID != 0 {
+			return nil, errors.New("共同计划不指定执行者")
+		}
+		if input.MemberIDs == nil {
+			ids = append(ids, creatorID)
+		}
+	}
+	seen := map[uint]bool{}
 	for _, id := range input.MemberIDs {
+		if planType == "personal" {
+			return nil, errors.New("个人计划只指定一位执行者")
+		}
+		if id != creatorID {
+			return nil, errors.New("共同计划需由家人自愿加入")
+		}
 		if !seen[id] {
 			ids = append(ids, id)
 			seen[id] = true
 		}
 	}
-	var exercises []model.GoalExercise
-	seenExercises := map[uint]bool{}
-	for _, ex := range input.Exercises {
-		if ex.Sets < 1 || ex.Sets > 100 || ex.Reps < 1 || ex.Reps > 1000 || seenExercises[ex.ExerciseID] {
-			return nil, errors.New("动作组数、次数或重复动作无效")
-		}
-		if _, err := s.exerciseRepo.GetExerciseByID(ex.ExerciseID); err != nil {
-			return nil, errors.New("动作不存在")
-		}
-		seenExercises[ex.ExerciseID] = true
-		exercises = append(exercises, model.GoalExercise{ExerciseID: ex.ExerciseID, Sets: ex.Sets, Reps: ex.Reps})
+	exercises, err := s.validatePlanExercises(input.Exercises)
+	if err != nil {
+		return nil, err
 	}
-	goal := &model.DailyGoal{FamilyID: familyID, Name: input.Name, CreatedBy: creatorID, IsActive: true}
+	goal := &model.DailyGoal{FamilyID: familyID, Name: input.Name, CreatedBy: creatorID, IsActive: true, PlanType: planType, ExecutorID: input.ExecutorID}
 	if input.RequestID != "" {
 		if len(input.RequestID) > 64 {
 			return nil, errors.New("创建请求标识无效")
@@ -81,7 +102,7 @@ func (s *GoalService) CreateGoal(familyID, creatorID uint, input CreateGoalInput
 	if err := s.goalRepo.CreateWithRelations(goal, ids, exercises); err != nil {
 		return nil, errors.New("创建目标失败，请检查成员或重试")
 	}
-	return s.goalRepo.FindGoalByID(goal.ID)
+	return s.GetGoalForUser(goal.ID, creatorID)
 }
 
 // GetGoal 获取目标详情
@@ -107,7 +128,7 @@ func (s *GoalService) GetUserGoalsWithProgress(userID uint) ([]GoalWithProgress,
 	}
 
 	date := clock.Now().Format("2006-01-02")
-	var result []GoalWithProgress
+	result := make([]GoalWithProgress, 0)
 
 	for _, goal := range goals {
 		// 直接使用已预加载的数据计算进度
@@ -177,16 +198,16 @@ func (s *GoalService) GetUserFamiliesWithGoals(userID uint) ([]FamilyWithGoals, 
 	}
 
 	date := clock.Now().Format("2006-01-02")
-	var result []FamilyWithGoals
+	result := make([]FamilyWithGoals, 0)
 
 	for _, family := range families {
 		// 获取该家庭的所有目标
 		goals, err := s.goalRepo.GetGoalsByFamilyID(family.ID)
 		if err != nil {
-			continue
+			return nil, err
 		}
 
-		var familyGoals []GoalWithProgress
+		familyGoals := make([]GoalWithProgress, 0)
 		for _, goal := range goals {
 			// 只返回活跃的目标
 			if !goal.IsActive {
@@ -207,6 +228,9 @@ func (s *GoalService) GetUserFamiliesWithGoals(userID uint) ([]FamilyWithGoals, 
 			}
 
 			// 如果是目标成员，计算今日完成进度
+			if !isMember {
+				continue
+			}
 			if isMember {
 				completions, err := s.goalRepo.GetMemberCompletions(goal.ID, userID, date)
 				if err != nil {
@@ -255,33 +279,21 @@ type UpdateGoalInput struct {
 
 // UpdateGoal 更新目标
 func (s *GoalService) UpdateGoal(goalID, userID uint, input UpdateGoalInput) (*model.DailyGoal, error) {
-	if input.MemberIDs != nil || input.Exercises != nil {
-		return nil, errors.New("此接口暂不支持修改目标成员和动作")
-	}
-	err := s.goalRepo.Mutate(goalID, userID, func(tx *gorm.DB, goal *model.DailyGoal) error {
-		changes := map[string]interface{}{}
-		if input.Name != "" {
-			name := strings.TrimSpace(input.Name)
-			if name == "" || utf8.RuneCountInString(name) > 64 {
-				return errors.New("目标名称无效")
-			}
-			changes["name"] = name
-		}
-		if input.IsActive != nil {
-			changes["is_active"] = *input.IsActive
-		}
-		return tx.Model(goal).Updates(changes).Error
-	})
-	if err != nil {
-		return nil, err
-	}
-	return s.goalRepo.FindGoalByID(goalID)
+	return s.updatePlan(goalID, userID, input)
 }
 func (s *GoalService) DeleteGoal(goalID, userID uint) error {
-	return s.goalRepo.Mutate(goalID, userID, func(tx *gorm.DB, goal *model.DailyGoal) error { return tx.Delete(goal).Error })
+	return s.goalRepo.Mutate(goalID, userID, func(tx *gorm.DB, goal *model.DailyGoal) error {
+		if !canManagePlan(tx, goal, userID) {
+			return errors.New("无权限修改计划")
+		}
+		return tx.Delete(goal).Error
+	})
 }
 func (s *GoalService) AddGoalMember(goalID, userID, newMemberID uint) error {
 	return s.goalRepo.Mutate(goalID, userID, func(tx *gorm.DB, goal *model.DailyGoal) error {
+		if goal.PlanType == "personal" || userID != newMemberID {
+			return errors.New("仅可自行加入共同计划")
+		}
 		if !goal.IsActive {
 			return errors.New("目标已停用")
 		}
@@ -308,28 +320,37 @@ func (s *GoalService) AddGoalExercise(goalID, userID, exerciseID uint, sets, rep
 		return errors.New("动作组数或次数无效")
 	}
 	return s.goalRepo.Mutate(goalID, userID, func(tx *gorm.DB, goal *model.DailyGoal) error {
-		if !goal.IsActive {
-			return errors.New("目标已停用")
+		if !canManagePlan(tx, goal, userID) {
+			return errors.New("无权限修改计划")
 		}
-		var exercise model.Exercise
-		if err := tx.First(&exercise, exerciseID).Error; err != nil {
-			return errors.New("动作不存在")
-		}
-		var n int64
-		if err := tx.Model(&model.GoalExercise{}).Where("goal_id=? AND exercise_id=?", goalID, exerciseID).Count(&n).Error; err != nil {
+		r := repository.NewGoalRepository(tx)
+		if err := r.LoadPlanDate(goal, clock.Now().Format("2006-01-02")); err != nil {
 			return err
 		}
-		if n > 0 {
-			return errors.New("目标已有该动作")
+		if err := r.LoadPendingPlan(goal); err != nil {
+			return err
 		}
-		return tx.Create(&model.GoalExercise{GoalID: goalID, ExerciseID: exerciseID, Sets: sets, Reps: reps}).Error
+		existing := goal.Exercises
+		if goal.PendingEffectiveDate != "" {
+			existing = goal.PendingExercises
+		}
+		inputs := []GoalExerciseInput{{ExerciseID: exerciseID, Sets: sets, Reps: reps}}
+		for _, ex := range existing {
+			inputs = append(inputs, GoalExerciseInput{ExerciseID: ex.ExerciseID, Sets: ex.Sets, Reps: ex.Reps})
+		}
+		exercises, err := s.validatePlanExercises(inputs)
+		if err != nil {
+			return err
+		}
+		return savePlanRevision(tx, goalID, exercises)
 	})
 }
 
 // CompleteExerciseInput 完成动作输入
 type CompleteExerciseInput struct {
-	GoalExerciseID uint `json:"goal_exercise_id"`
-	CompletedSets  int  `json:"completed_sets"`
+	Date           string `json:"date"`
+	GoalExerciseID uint   `json:"goal_exercise_id"`
+	CompletedSets  int    `json:"completed_sets"`
 }
 
 // CompleteExercise 完成动作
@@ -339,10 +360,11 @@ func (s *GoalService) CompleteExercise(goalID, userID uint, input CompleteExerci
 
 // GoalProgress 目标进度
 type GoalProgress struct {
-	GoalID      uint             `json:"goal_id"`
-	GoalName    string           `json:"goal_name"`
-	Date        string           `json:"date"`
-	MemberStats []MemberProgress `json:"member_stats"`
+	GoalID      uint                 `json:"goal_id"`
+	GoalName    string               `json:"goal_name"`
+	Date        string               `json:"date"`
+	Exercises   []model.GoalExercise `json:"exercises"`
+	MemberStats []MemberProgress     `json:"member_stats"`
 }
 
 // MemberProgress 成员进度
@@ -381,10 +403,21 @@ func (s *GoalService) GetGoalProgress(goalID uint, date string) (*GoalProgress, 
 		date = clock.Now().Format("2006-01-02")
 	}
 
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		return nil, errors.New("日期格式无效")
+	}
+	if err := s.goalRepo.LoadPlanDate(goal, date); err != nil {
+		return nil, err
+	}
+	if err := s.goalRepo.DB().Unscoped().Where("goal_id=?", goalID).Preload("User").Find(&goal.Members).Error; err != nil {
+		return nil, err
+	}
 	progress := &GoalProgress{
-		GoalID:   goal.ID,
-		GoalName: goal.Name,
-		Date:     date,
+		GoalID:      goal.ID,
+		GoalName:    goal.Name,
+		Date:        date,
+		Exercises:   goal.Exercises,
+		MemberStats: make([]MemberProgress, 0),
 	}
 
 	// 获取每个成员的进度
@@ -405,6 +438,10 @@ func (s *GoalService) GetGoalProgress(goalID uint, date string) (*GoalProgress, 
 		if err != nil {
 			return nil, err
 		}
+		if member.DeletedAt.Valid && len(completions) == 0 {
+			continue
+		}
+		memberProgress.IsCurrentMember = current && !member.DeletedAt.Valid
 		completionMap := make(map[uint]model.GoalCompletion)
 		for _, c := range completions {
 			completionMap[c.GoalExerciseID] = c

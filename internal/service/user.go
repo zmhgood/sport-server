@@ -301,10 +301,10 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 		return nil, err
 	}
 
-	// 获取用户家庭目标总组数（柱状图分母）
+	// 仅供今日展示的当前计划组数，不用作历史柱状图分母。
 	goalTotalSets, err := s.userRepo.GetUserGoalTotalSets(userID)
 	if err != nil {
-		goalTotalSets = 0
+		return nil, err
 	}
 	log.Printf("[GetWeekStats] userID=%d goalTotalSets=%d err=%v", userID, goalTotalSets, err)
 
@@ -319,11 +319,17 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 			DateStr:   dateObj.Format("01/02"),
 			Weekday:   "周" + weekdays[i],
 			Count:     0,
-			TotalSets: goalTotalSets,
+			TotalSets: 0,
 			Minutes:   0,
 			GoalID:    0,
 			GoalName:  "",
 			GoalIDs:   []uint{},
+		}
+		// Legacy dates have no complete per-person requirement snapshots. Do not
+		// reinterpret historical bars against today's changing plan requirements.
+		if date == now.Format("2006-01-02") {
+			dailyMap[date].TotalSets = goalTotalSets
+			dailyMap[date].TargetKnown = true
 		}
 	}
 
@@ -389,15 +395,16 @@ func (s *UserService) GetWeekStats(userID uint, weekOffset int) (*WeekStatsResul
 
 // DailyStat 每日统计
 type DailyStat struct {
-	Date      string `json:"date"`
-	DateStr   string `json:"dateStr"`
-	Weekday   string `json:"weekday"`
-	Count     int    `json:"count"`
-	TotalSets int    `json:"totalSets"`
-	Minutes   int    `json:"minutes"`
-	GoalID    uint   `json:"goalId"`
-	GoalName  string `json:"goalName"`
-	GoalIDs   []uint `json:"goalIds"` // 当天参与的所有目标ID
+	TargetKnown bool   `json:"targetKnown"`
+	Date        string `json:"date"`
+	DateStr     string `json:"dateStr"`
+	Weekday     string `json:"weekday"`
+	Count       int    `json:"count"`
+	TotalSets   int    `json:"totalSets"`
+	Minutes     int    `json:"minutes"`
+	GoalID      uint   `json:"goalId"`
+	GoalName    string `json:"goalName"`
+	GoalIDs     []uint `json:"goalIds"` // 当天参与的所有目标ID
 }
 
 // GetDashboardStats 获取仪表盘统计

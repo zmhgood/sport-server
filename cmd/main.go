@@ -30,7 +30,7 @@ func main() {
 	defer database.Close()
 
 	// 自动迁移数据库表
-	database.DB.AutoMigrate(
+	if err := database.DB.AutoMigrate(
 		&model.Admin{},
 		&model.User{},
 		&model.MuscleGroup{},
@@ -47,9 +47,12 @@ func main() {
 		&model.GoalMember{},
 		&model.GoalExercise{},
 		&model.GoalCompletion{},
+		&model.PlanRevision{},
 		// 系统配置
 		&model.SystemConfig{},
-	)
+	); err != nil {
+		log.Fatal("业务表迁移失败，请检查迁移后重试")
+	}
 
 	// 初始化默认管理员
 	initDefaultAdmin(database.DB)
@@ -159,11 +162,12 @@ func main() {
 			authGroup.GET("/goals/:id/progress", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoalProgress) // 获取目标进度（必须在 :id 之前）
 			authGroup.GET("/goals/:id/history", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoalHistory)   // 获取历史记录（必须在 :id 之前）
 			authGroup.POST("/goals/:id/members", goalHandler.AddGoalMember)                                            // 添加目标成员
-			authGroup.POST("/goals/:id/exercises", goalHandler.AddGoalExercise)                                        // 添加目标动作
-			authGroup.POST("/goals/:id/complete", goalHandler.CompleteExercise)                                        // 完成动作
-			authGroup.GET("/goals/:id", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoal)                  // 获取目标详情（必须在所有 /goals/:id/xxx 之后）
-			authGroup.PUT("/goals/:id", goalHandler.UpdateGoal)                                                        // 更新目标
-			authGroup.DELETE("/goals/:id", goalHandler.DeleteGoal)                                                     // 删除目标
+			authGroup.DELETE("/goals/:id/members/me", goalHandler.LeaveGoal)
+			authGroup.POST("/goals/:id/exercises", goalHandler.AddGoalExercise)                       // 添加目标动作
+			authGroup.POST("/goals/:id/complete", goalHandler.CompleteExercise)                       // 完成动作
+			authGroup.GET("/goals/:id", middleware.FamilyAccessMiddleware(true), goalHandler.GetGoal) // 获取目标详情（必须在所有 /goals/:id/xxx 之后）
+			authGroup.PUT("/goals/:id", goalHandler.UpdateGoal)                                       // 更新目标
+			authGroup.DELETE("/goals/:id", goalHandler.DeleteGoal)                                    // 删除目标
 		}
 
 		// 管理后台路由 - 需要管理员认证

@@ -80,12 +80,15 @@ func newFixture(t *testing.T) *fixture {
 		}
 		exercises = append(exercises, GoalExerciseInput{ExerciseID: ex.ID, Sets: sets, Reps: 10})
 	}
-	f.goal, err = f.goalSvc.CreateGoal(f.family.ID, f.users[0].ID, CreateGoalInput{Name: "Synthetic goal", MemberIDs: []uint{f.users[0].ID, f.users[1].ID}, Exercises: exercises})
+	f.goal, err = f.goalSvc.CreateGoal(f.family.ID, f.users[0].ID, CreateGoalInput{Name: "Synthetic goal", MemberIDs: []uint{f.users[0].ID}, Exercises: exercises})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.other, err = f.goalSvc.CreateGoal(f.family.ID, f.users[0].ID, CreateGoalInput{Name: "Other goal", Exercises: exercises[:1]})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.goalSvc.AddGoalMember(f.goal.ID, f.users[1].ID, f.users[1].ID); err != nil {
 		t.Fatal(err)
 	}
 	return f
@@ -168,7 +171,12 @@ func TestRemovedMemberCannotSubmitAndHistoricalDataRemain(t *testing.T) {
 }
 func TestProgressOwnershipBoundsAndNoPartialWrites(t *testing.T) {
 	f := newFixture(t)
-	for _, in := range []CompleteExerciseInput{{f.other.Exercises[0].ID, 1}, {99999999, 1}, {f.goal.Exercises[0].ID, -1}, {f.goal.Exercises[0].ID, 4}} {
+	for _, in := range []CompleteExerciseInput{
+		{GoalExerciseID: f.other.Exercises[0].ID, CompletedSets: 1},
+		{GoalExerciseID: 99999999, CompletedSets: 1},
+		{GoalExerciseID: f.goal.Exercises[0].ID, CompletedSets: -1},
+		{GoalExerciseID: f.goal.Exercises[0].ID, CompletedSets: 4},
+	} {
 		if err := f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, in); err == nil {
 			t.Errorf("invalid progress accepted %+v", in)
 		}
@@ -180,7 +188,7 @@ func TestProgressOwnershipBoundsAndNoPartialWrites(t *testing.T) {
 	if err := f.goalSvc.DeleteGoal(f.goal.ID, f.users[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{f.goal.Exercises[0].ID, 3}); err == nil {
+	if err := f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{GoalExerciseID: f.goal.Exercises[0].ID, CompletedSets: 3}); err == nil {
 		t.Fatal("deleted target accepted completion")
 	}
 }
@@ -216,7 +224,7 @@ func TestProgressIdempotencyConcurrentAndStatReconciliation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{f.goal.Exercises[1].ID, 2})
+			errs <- f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{GoalExerciseID: f.goal.Exercises[1].ID, CompletedSets: 2})
 		}()
 	}
 	wg.Wait()
@@ -270,7 +278,7 @@ func TestFirstProgressRaceAndAtomicRollback(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{f.goal.Exercises[0].ID, 3})
+			errs <- f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{GoalExerciseID: f.goal.Exercises[0].ID, CompletedSets: 3})
 		}()
 	}
 	wg.Wait()
@@ -291,7 +299,7 @@ func TestFirstProgressRaceAndAtomicRollback(t *testing.T) {
 		}
 	})
 	defer f.db.Callback().Create().Remove(name)
-	err := f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{f.goal.Exercises[1].ID, 2})
+	err := f.goalSvc.CompleteExercise(f.goal.ID, f.users[0].ID, CompleteExerciseInput{GoalExerciseID: f.goal.Exercises[1].ID, CompletedSets: 2})
 	if err == nil {
 		t.Fatal("injected failure falsely succeeded")
 	}
@@ -358,7 +366,7 @@ func TestCrossFamilyStatsArchivedHistoryAndDistinctDays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = f.goalSvc.CompleteExercise(other.ID, f.users[0].ID, CompleteExerciseInput{other.Exercises[0].ID, 1}); err != nil {
+	if err = f.goalSvc.CompleteExercise(other.ID, f.users[0].ID, CompleteExerciseInput{GoalExerciseID: other.Exercises[0].ID, CompletedSets: 1}); err != nil {
 		t.Fatal(err)
 	}
 	stats, _ := repository.NewUserRepository(f.db).GetUserTotalStats(f.users[0].ID)

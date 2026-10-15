@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"elderly-fitness/internal/model"
+	"elderly-fitness/pkg/clock"
 
 	"gorm.io/gorm"
 )
@@ -32,9 +33,13 @@ func (r *GoalRepository) UpdateGoal(goal *model.DailyGoal) error {
 func (r *GoalRepository) FindGoalByID(id uint) (*model.DailyGoal, error) {
 	var goal model.DailyGoal
 	err := r.db.Preload("Members.User", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name", "avatar_url") }).
+		Preload("Members", "EXISTS (SELECT 1 FROM family_members fm JOIN daily_goals g ON g.family_id=fm.family_id WHERE g.id=goal_members.goal_id AND fm.user_id=goal_members.user_id AND fm.deleted_at IS NULL)").
 		Preload("Exercises.Exercise").
 		First(&goal, id).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := r.LoadPlanDate(&goal, clock.Now().Format("2006-01-02")); err != nil {
 		return nil, err
 	}
 	return &goal, nil
@@ -43,11 +48,15 @@ func (r *GoalRepository) FindGoalByID(id uint) (*model.DailyGoal, error) {
 // GetGoalsByFamilyID 获取家庭的目标列表
 func (r *GoalRepository) GetGoalsByFamilyID(familyID uint) ([]model.DailyGoal, error) {
 	var goals []model.DailyGoal
-	err := r.db.Where("family_id = ? AND is_active = ?", familyID, true).
+	err := r.db.Where("family_id = ?", familyID).
+		Preload("Members", "EXISTS (SELECT 1 FROM family_members fm JOIN daily_goals g ON g.family_id=fm.family_id WHERE g.id=goal_members.goal_id AND fm.user_id=goal_members.user_id AND fm.deleted_at IS NULL)").
 		Preload("Members.User", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name", "avatar_url") }).
 		Preload("Exercises.Exercise").
 		Order("created_at DESC").
 		Find(&goals).Error
+	if err == nil {
+		err = r.LoadPlansToday(goals)
+	}
 	return goals, err
 }
 
@@ -58,10 +67,14 @@ func (r *GoalRepository) GetGoalsByUserID(userID uint) ([]model.DailyGoal, error
 		Joins("JOIN families ON families.id = daily_goals.family_id AND families.deleted_at IS NULL").
 		Joins("JOIN family_members ON family_members.family_id = daily_goals.family_id AND family_members.user_id = goal_members.user_id AND family_members.deleted_at IS NULL").
 		Where("goal_members.user_id = ? AND goal_members.deleted_at IS NULL AND daily_goals.is_active = ?", userID, true).
+		Preload("Members", "EXISTS (SELECT 1 FROM family_members fm JOIN daily_goals g ON g.family_id=fm.family_id WHERE g.id=goal_members.goal_id AND fm.user_id=goal_members.user_id AND fm.deleted_at IS NULL)").
 		Preload("Members.User", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nick_name", "avatar_url") }).
 		Preload("Exercises.Exercise").
 		Order("daily_goals.created_at DESC").
 		Find(&goals).Error
+	if err == nil {
+		err = r.LoadPlansToday(goals)
+	}
 	return goals, err
 }
 
@@ -211,6 +224,9 @@ func (r *GoalRepository) CreateWithRelations(goal *model.DailyGoal, members []ui
 		var current model.FamilyMember
 		if err := tx.Where("family_id=? AND user_id=?", goal.FamilyID, goal.CreatedBy).First(&current).Error; err != nil {
 			return errors.New("目标创建者已不属于家庭")
+		}
+		if goal.PlanType == "personal" && goal.ExecutorID != goal.CreatedBy && current.Role != "admin" {
+			return errors.New("只有家庭管理员能为家人安排计划")
 		}
 		var creator model.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&creator, goal.CreatedBy).Error; err != nil {

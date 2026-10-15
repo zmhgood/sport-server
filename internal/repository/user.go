@@ -100,7 +100,8 @@ func (r *UserRepository) GetUserGoalTotalSets(userID uint) (int, error) {
 		JOIN families f ON f.id=g.family_id AND f.deleted_at IS NULL
  JOIN family_members fm ON fm.family_id=g.family_id AND fm.user_id=gm.user_id AND fm.deleted_at IS NULL
  WHERE gm.user_id = ? AND gm.deleted_at IS NULL AND g.is_active=true
-	`, userID).Scan(&total).Error
+ AND ge.revision_id=COALESCE((SELECT pr.id FROM plan_revisions pr WHERE pr.goal_id=g.id AND pr.effective_date<=? ORDER BY pr.effective_date DESC LIMIT 1),0)
+	`, userID, clock.Now().Format("2006-01-02")).Scan(&total).Error
 	log.Printf("[GetUserGoalTotalSets] userID=%d total=%d err=%v", userID, total, err)
 	return int(total), err
 }

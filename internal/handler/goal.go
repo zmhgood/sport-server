@@ -17,6 +17,19 @@ func NewGoalHandler(goalService *service.GoalService) *GoalHandler {
 	return &GoalHandler{goalService: goalService}
 }
 
+func (h *GoalHandler) LeaveGoal(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		c.JSON(400, Response{Code: 400, Message: "参数错误"})
+		return
+	}
+	if err := h.goalService.LeaveGoal(uint(id), c.GetUint("userID")); err != nil {
+		c.JSON(400, Response{Code: 400, Message: err.Error()})
+		return
+	}
+	c.JSON(200, Response{Code: 0, Message: "已退出计划"})
+}
+
 // CreateGoal 创建目标
 func (h *GoalHandler) CreateGoal(c *gin.Context) {
 	userID, _ := c.Get("userID")
@@ -53,7 +66,7 @@ func (h *GoalHandler) GetGoal(c *gin.Context) {
 		return
 	}
 
-	goal, err := h.goalService.GetGoal(uint(id))
+	goal, err := h.goalService.GetGoalForUser(uint(id), c.GetUint("userID"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, Response{Code: 404, Message: "目标不存在"})
 		return
@@ -266,7 +279,7 @@ func (h *GoalHandler) GetUserFamiliesWithGoals(c *gin.Context) {
 
 	familiesWithGoals, err := h.goalService.GetUserFamiliesWithGoals(userID.(uint))
 	if err != nil {
-		c.JSON(http.StatusOK, Response{Code: 0, Message: "获取成功", Data: []interface{}{}})
+		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: "今日安排加载失败，请重试"})
 		return
 	}
 

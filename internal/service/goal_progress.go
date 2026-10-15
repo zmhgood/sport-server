@@ -40,13 +40,26 @@ func (s *GoalService) completeProgress(goalID, userID uint, input CompleteExerci
 		if err := tx.Where("id=? AND goal_id=?", input.GoalExerciseID, goalID).First(&ex).Error; err != nil {
 			return errors.New("动作不属于该目标")
 		}
+		now := clock.Now()
+		date := now.Format("2006-01-02")
+		if input.Date != "" && input.Date != date {
+			return errors.New("日期已变化，请刷新今日任务")
+		}
+		revisionID, err := repository.RevisionForDate(tx, goalID, date)
+		if err != nil {
+			return err
+		}
+		if ex.RevisionID != revisionID {
+			return errors.New("计划已更新，请刷新后再记录")
+		}
+		if goal.PlanType == "personal" && goal.ExecutorID != userID {
+			return errors.New("只能记录本人的锻炼")
+		}
 		if input.CompletedSets < 0 || input.CompletedSets > ex.Sets || ex.Sets <= 0 {
 			return errors.New("完成组数超出目标范围")
 		}
-		now := clock.Now()
-		date := now.Format("2006-01-02")
 		var completion model.GoalCompletion
-		err := tx.Where("goal_member_id=? AND goal_exercise_id=? AND date=?", gm.ID, ex.ID, date).Order("id DESC").Take(&completion).Error
+		err = tx.Where("goal_member_id=? AND goal_exercise_id=? AND date=?", gm.ID, ex.ID, date).Order("id DESC").Take(&completion).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("进度读取失败，请重试")
 		}

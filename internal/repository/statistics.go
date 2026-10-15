@@ -56,7 +56,7 @@ func (r *UserRepository) GetFamilyStatistics(userID uint) ([]FamilyStatistics, e
 func (r *UserRepository) progressRows(userID uint, limit int) ([]GoalCompletionWithGoal, error) {
 	var rows []GoalCompletionWithGoal
 	q := r.completionQuery().Where("gm.user_id=? AND gc.completed_sets>0", userID).
-		Joins("JOIN (SELECT goal_id,COUNT(*) total_exercises,SUM(sets) total_sets FROM goal_exercises GROUP BY goal_id) ge_sum ON ge_sum.goal_id=g.id").
+		Joins("JOIN (SELECT goal_id,revision_id,COUNT(*) total_exercises,SUM(sets) total_sets FROM goal_exercises WHERE deleted_at IS NULL GROUP BY goal_id,revision_id) ge_sum ON ge_sum.goal_id=g.id AND ge_sum.revision_id=ge.revision_id").
 		Select("gc.date,g.id goal_id,g.name goal_name,e.id exercise_id,e.name exercise_name,gc.completed_sets,ge.sets target_sets,ge_sum.total_exercises,ge_sum.total_sets goal_total_sets").Order("gc.date DESC,g.id DESC,ge.id")
 	if limit > 0 {
 		q = q.Limit(limit)

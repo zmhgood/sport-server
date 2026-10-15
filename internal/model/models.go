@@ -173,18 +173,26 @@ type FamilyMember struct {
 
 // DailyGoal 每日目标
 type DailyGoal struct {
-	RequestKey *string        `json:"-" gorm:"size:64;uniqueIndex:idx_goal_create_request"`
-	ID         uint           `json:"id" gorm:"primaryKey"`
-	FamilyID   uint           `json:"family_id" gorm:"index"`
-	Name       string         `json:"name" gorm:"size:64;not null"`
-	CreatedBy  uint           `json:"created_by" gorm:"index;uniqueIndex:idx_goal_create_request"`
-	IsActive   bool           `json:"is_active" gorm:"default:true"`
-	Family     Family         `json:"family" gorm:"foreignKey:FamilyID"`
-	Members    []GoalMember   `json:"members" gorm:"foreignKey:GoalID"`
-	Exercises  []GoalExercise `json:"exercises" gorm:"foreignKey:GoalID"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
+	PlanType             string         `json:"plan_type" gorm:"size:16;not null;default:shared"`
+	ExecutorID           uint           `json:"executor_id" gorm:"index;not null;default:0"`
+	CanManage            bool           `json:"can_manage" gorm:"-"`
+	IsParticipating      bool           `json:"is_participating" gorm:"-"`
+	CurrentDate          string         `json:"current_date" gorm:"-"`
+	RevisionID           uint           `json:"revision_id" gorm:"-"`
+	PendingEffectiveDate string         `json:"pending_effective_date" gorm:"-"`
+	PendingExercises     []GoalExercise `json:"pending_exercises,omitempty" gorm:"-"`
+	RequestKey           *string        `json:"-" gorm:"size:64;uniqueIndex:idx_goal_create_request"`
+	ID                   uint           `json:"id" gorm:"primaryKey"`
+	FamilyID             uint           `json:"family_id" gorm:"index"`
+	Name                 string         `json:"name" gorm:"size:64;not null"`
+	CreatedBy            uint           `json:"created_by" gorm:"index;uniqueIndex:idx_goal_create_request"`
+	IsActive             bool           `json:"is_active" gorm:"default:true"`
+	Family               Family         `json:"family" gorm:"foreignKey:FamilyID"`
+	Members              []GoalMember   `json:"members" gorm:"foreignKey:GoalID"`
+	Exercises            []GoalExercise `json:"exercises" gorm:"foreignKey:GoalID"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	DeletedAt            gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // GoalMember 目标成员(参与该目标的家庭成员)
@@ -201,6 +209,7 @@ type GoalMember struct {
 
 // GoalExercise 目标动作
 type GoalExercise struct {
+	RevisionID  uint             `json:"revision_id" gorm:"index;not null;default:0"`
 	ID          uint             `json:"id" gorm:"primaryKey"`
 	GoalID      uint             `json:"goal_id" gorm:"index"`
 	ExerciseID  uint             `json:"exercise_id" gorm:"index"`

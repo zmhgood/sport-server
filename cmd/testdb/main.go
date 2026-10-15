@@ -81,7 +81,7 @@ func run() error {
 	}
 	sqlDB, _ := db.DB()
 	defer sqlDB.Close()
-	if err = db.AutoMigrate(&model.User{}, &model.MuscleGroup{}, &model.Exercise{}, &model.ExerciseStep{}, &model.ExerciseBenefit{}, &model.ExercisePrecaution{}, &model.UserExerciseRecord{}, &model.UserDailyStats{}, &model.Family{}, &model.FamilyMember{}, &model.DailyGoal{}, &model.GoalMember{}, &model.GoalExercise{}, &model.GoalCompletion{}, &model.Comment{}, &model.CommentLike{}, &model.Admin{}, &model.SystemConfig{}); err != nil {
+	if err = db.AutoMigrate(&model.User{}, &model.MuscleGroup{}, &model.Exercise{}, &model.ExerciseStep{}, &model.ExerciseBenefit{}, &model.ExercisePrecaution{}, &model.UserExerciseRecord{}, &model.UserDailyStats{}, &model.Family{}, &model.FamilyMember{}, &model.DailyGoal{}, &model.GoalMember{}, &model.GoalExercise{}, &model.GoalCompletion{}, &model.PlanRevision{}, &model.Comment{}, &model.CommentLike{}, &model.Admin{}, &model.SystemConfig{}); err != nil {
 		return fmt.Errorf("test schema creation failed")
 	}
 	secret := make([]byte, 32)
