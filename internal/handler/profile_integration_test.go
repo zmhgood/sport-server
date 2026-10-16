@@ -48,7 +48,7 @@ func TestProfileHTTPPersistenceAndFamilyFailure(t *testing.T) {
 	r.Use(func(c *gin.Context) { c.Set("userID", user.ID) })
 	r.PUT("/user/info", h.UpdateUserInfo)
 	r.GET("/user/info", h.GetUserInfo)
-	req := httptest.NewRequest("PUT", "/user/info", bytes.NewBufferString(`{"nick_name":"Synthetic HTTP","gender":2,"height":171,"weight":66.5,"age":65,"health_status":"Synthetic"}`))
+	req := httptest.NewRequest("PUT", "/user/info", bytes.NewBufferString(`{"nick_name":"Synthetic HTTP","gender":2,"height":171,"weight":67,"age":65,"health_status":"Synthetic"}`))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	r.ServeHTTP(response, req)
@@ -64,8 +64,26 @@ func TestProfileHTTPPersistenceAndFamilyFailure(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Code != 0 || body.Data.Height != 171 || body.Data.Weight != 66.5 || body.Data.Gender != 2 || body.Data.NickName != "Synthetic HTTP" {
+	if body.Code != 0 || body.Data.Height != 171 || body.Data.Weight != 67 || body.Data.Gender != 2 || body.Data.NickName != "Synthetic HTTP" {
 		t.Fatal("HTTP contract did not persist profile")
+	}
+
+	// Rejected values must not partially persist other fields in the same request.
+	for _, invalid := range []string{`"weight":66.5`, `"height":170.5`, `"age":65.5`, `"weight":301`, `"height":251`, `"age":151`} {
+		req = httptest.NewRequest("PUT", "/user/info", bytes.NewBufferString(`{"nick_name":"Must not persist",`+invalid+`}`))
+		req.Header.Set("Content-Type", "application/json")
+		response = httptest.NewRecorder()
+		r.ServeHTTP(response, req)
+		if response.Code == 200 {
+			t.Fatalf("invalid numeric value accepted: %s", invalid)
+		}
+		var persisted model.User
+		if err := db.First(&persisted, user.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if persisted.NickName != body.Data.NickName || persisted.Weight != 67 || persisted.Height != 171 || persisted.Age != 65 {
+			t.Fatal("rejected profile request partially changed stored data")
+		}
 	}
 
 	uh := NewUserHandler(service.NewUserService(ur, repository.NewExerciseRepository(db)))
