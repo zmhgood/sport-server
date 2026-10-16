@@ -73,7 +73,6 @@ func main() {
 	exerciseService := service.NewExerciseService(exerciseRepo, userRepo)
 	userService := service.NewUserService(userRepo, exerciseRepo)
 	userService.SetCommentRepo(commentRepo)
-	commentService := service.NewCommentService(commentRepo)
 	adminService := service.NewAdminService(adminRepo, userRepo)
 	familyService := service.NewFamilyService(familyRepo)
 	goalService := service.NewGoalService(goalRepo, familyRepo, exerciseRepo)
@@ -83,7 +82,6 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService, smsService)
 	exerciseHandler := handler.NewExerciseHandler(exerciseService)
 	userHandler := handler.NewUserHandler(userService)
-	commentHandler := handler.NewCommentHandler(commentService)
 	adminHandler := handler.NewAdminHandler(adminService, userService)
 	uploadHandler := handler.NewUploadHandler()
 	familyHandler := handler.NewFamilyHandler(familyService)
@@ -110,8 +108,8 @@ func main() {
 		api.GET("/exercises", exerciseHandler.GetExercises)
 		api.GET("/exercises/:id", exerciseHandler.GetExerciseDetail)
 
-		// 评论相关 - 公开（获取评论列表）
-		api.GET("/comments", commentHandler.GetComments)
+		// 旧客户端的评论入口统一停用，历史数据由管理后台保留。
+		registerDisabledCommentRoutes(api)
 
 		// 系统配置 - 公开
 		api.GET("/configs", systemHandler.GetConfigs)
@@ -132,16 +130,10 @@ func main() {
 			authGroup.GET("/user/history", userHandler.GetHistory)
 			authGroup.GET("/user/today-progress", userHandler.GetTodayProgress)
 			authGroup.GET("/user/week-stats", userHandler.GetWeekStats)
-			authGroup.GET("/user/comments", commentHandler.GetUserComments)
 
 			// 锻炼相关
 			authGroup.GET("/exercises/recommend", exerciseHandler.GetRecommendExercises)
 			authGroup.POST("/exercises/record", exerciseHandler.RecordExercise)
-
-			// 评论相关 - 需要认证
-			authGroup.POST("/comments", commentHandler.CreateComment)
-			authGroup.DELETE("/comments/:id", commentHandler.DeleteComment)
-			authGroup.POST("/comments/:id/like", commentHandler.ToggleLike)
 
 			// 家庭相关
 			authGroup.POST("/family", familyHandler.CreateFamily)                                                      // 创建家庭
