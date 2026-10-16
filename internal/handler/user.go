@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"elderly-fitness/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
@@ -49,6 +50,7 @@ func (h *UserHandler) GetHistory(c *gin.Context) {
 	// 获取分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	page, pageSize = pagination.Normalize(page, pageSize, 10)
 
 	log.Printf("[GetHistory] userID=%v, page=%d, pageSize=%d", userID, page, pageSize)
 

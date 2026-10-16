@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"elderly-fitness/pkg/pagination"
 	"net/http"
 	"strconv"
 
@@ -227,13 +228,7 @@ func (h *FamilyHandler) RefreshInviteCode(c *gin.Context) {
 func (h *FamilyHandler) ListFamiliesForAdmin(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
+	page, pageSize = pagination.Normalize(page, pageSize, 20)
 
 	families, total, err := h.familyService.ListAllFamilies(page, pageSize, c.Query("keyword"))
 	if err != nil {

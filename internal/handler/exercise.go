@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"elderly-fitness/pkg/pagination"
 	"net/http"
 	"strconv"
 
@@ -44,12 +45,7 @@ func (h *ExerciseHandler) GetMuscleGroups(c *gin.Context) {
 func (h *ExerciseHandler) GetExercises(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
+	page, pageSize = pagination.Normalize(page, pageSize, 10)
 	muscleGroupIDStr := c.Query("muscle_group_id")
 	difficulty := c.Query("difficulty")
 	keyword := c.Query("keyword")

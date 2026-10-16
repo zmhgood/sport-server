@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"elderly-fitness/pkg/pagination"
 	"net/http"
 	"strconv"
 
@@ -93,6 +94,7 @@ func (h *AdminHandler) GetAdminInfo(c *gin.Context) {
 func (h *AdminHandler) GetUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	page, pageSize = pagination.Normalize(page, pageSize, 10)
 	keyword := c.Query("keyword")
 
 	var gender *int
@@ -151,6 +153,7 @@ func (h *AdminHandler) GetUserStats(c *gin.Context) {
 func (h *AdminHandler) GetComments(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	page, pageSize = pagination.Normalize(page, pageSize, 10)
 	keyword := c.Query("keyword")
 
 	var status *int

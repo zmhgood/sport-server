@@ -2,6 +2,7 @@ package service
 
 import (
 	"elderly-fitness/pkg/clock"
+	"elderly-fitness/pkg/pagination"
 	"fmt"
 	"log"
 	"sort"
@@ -196,14 +197,9 @@ func (s *UserService) GetExerciseHistoryPaginated(userID uint, page, pageSize in
 
 	// 计算分页
 	total := len(result)
-	start := (page - 1) * pageSize
-	if start >= total {
-		log.Printf("[GetExerciseHistoryPaginated] start(%d) >= total(%d), return empty", start, total)
+	start, end := pagination.Bounds(page, pageSize, total)
+	if start == end {
 		return []ExerciseHistory{}, total, nil
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
 	}
 
 	log.Printf("[GetExerciseHistoryPaginated] Returning records [%d:%d] of %d", start, end, total)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"math"
 	"net/http"
 
 	"elderly-fitness/internal/service"
@@ -183,6 +184,11 @@ func (h *AuthHandler) UpdateUserInfo(c *gin.Context) {
 			Code:    400,
 			Message: "参数错误",
 		})
+		return
+	}
+
+	if req.Weight != nil && math.Trunc(*req.Weight) != *req.Weight {
+		c.JSON(http.StatusBadRequest, Response{Code: 400, Message: "体重请输入整数"})
 		return
 	}
 
