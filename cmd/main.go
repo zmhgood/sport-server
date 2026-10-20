@@ -136,6 +136,7 @@ func main() {
 			authGroup.POST("/exercises/record", exerciseHandler.RecordExercise)
 
 			// 家庭相关
+			authGroup.PUT("/family/:id/name", familyHandler.RenameFamily)                                              // 管理员修改家庭名称
 			authGroup.POST("/family", familyHandler.CreateFamily)                                                      // 创建家庭
 			authGroup.POST("/family/join", familyHandler.JoinFamily)                                                   // 加入家庭
 			authGroup.GET("/families", familyHandler.GetMyFamilies)                                                    // 获取我的所有家庭
