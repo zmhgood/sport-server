@@ -1,8 +1,12 @@
 package service
 
 import (
+	"elderly-fitness/internal/model"
 	"elderly-fitness/internal/repository"
+	"errors"
 )
+
+var ErrReservedConfigKey = errors.New("请在首页轮播管理中修改轮播配置")
 
 type SystemService struct {
 	systemRepo *repository.SystemRepository
@@ -23,6 +27,9 @@ func (s *SystemService) GetConfig(key string) (string, error) {
 
 // SetConfig 设置配置
 func (s *SystemService) SetConfig(key, value string) error {
+	if key == model.HomeBannersConfigKey {
+		return ErrReservedConfigKey
+	}
 	return s.systemRepo.SetConfig(key, value)
 }
 
@@ -35,7 +42,9 @@ func (s *SystemService) GetAllConfigs() (map[string]string, error) {
 
 	result := make(map[string]string)
 	for _, config := range configs {
-		result[config.Key] = config.Value
+		if config.Key != model.HomeBannersConfigKey {
+			result[config.Key] = config.Value
+		}
 	}
 	return result, nil
 }

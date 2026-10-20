@@ -87,6 +87,7 @@ func main() {
 	familyHandler := handler.NewFamilyHandler(familyService)
 	goalHandler := handler.NewGoalHandler(goalService)
 	systemHandler := handler.NewSystemHandler(systemService)
+	bannerHandler := handler.NewBannerHandler(service.NewBannerService(systemRepo, config.AppConfig.COS.BucketURL))
 
 	// 创建路由
 	r := gin.Default()
@@ -110,6 +111,8 @@ func main() {
 
 		// 旧客户端的评论入口统一停用，历史数据由管理后台保留。
 		registerDisabledCommentRoutes(api)
+
+		api.GET("/banners", bannerHandler.Public)
 
 		// 系统配置 - 公开
 		api.GET("/configs", systemHandler.GetConfigs)
@@ -182,6 +185,8 @@ func main() {
 			adminGroup.GET("/families", familyHandler.ListFamiliesForAdmin)
 			adminGroup.GET("/families/:id", familyHandler.GetFamily)
 			// 系统配置
+			adminGroup.GET("/banners", bannerHandler.Admin)
+			adminGroup.PUT("/banners", bannerHandler.Save)
 			adminGroup.GET("/configs", systemHandler.GetConfigs)
 			adminGroup.POST("/configs", systemHandler.UpdateConfigs)
 		}

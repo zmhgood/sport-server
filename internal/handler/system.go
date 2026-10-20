@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"elderly-fitness/internal/model"
+	"errors"
 	"net/http"
 
 	"elderly-fitness/internal/service"
@@ -46,6 +48,10 @@ func (h *SystemHandler) UpdateConfig(c *gin.Context) {
 	}
 
 	if err := h.systemService.SetConfig(req.Key, req.Value); err != nil {
+		if errors.Is(err, service.ErrReservedConfigKey) {
+			c.JSON(400, Response{Code: 400, Message: err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, Response{Code: 500, Message: "保存失败"})
 		return
 	}
@@ -63,6 +69,11 @@ func (h *SystemHandler) UpdateConfigs(c *gin.Context) {
 	var req UpdateConfigsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{Code: 400, Message: "参数错误: " + err.Error()})
+		return
+	}
+
+	if _, exists := req.Configs[model.HomeBannersConfigKey]; exists {
+		c.JSON(400, Response{Code: 400, Message: service.ErrReservedConfigKey.Error()})
 		return
 	}
 
