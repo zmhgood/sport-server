@@ -234,7 +234,15 @@ func (h *AdminHandler) DeleteComment(c *gin.Context) {
 
 // GetDashboardStats 获取仪表盘统计
 func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
-	stats, err := h.userService.GetDashboardStats()
+	days := 7
+	if value := c.DefaultQuery("days", "7"); value == "30" {
+		days = 30
+	} else if value != "7" {
+		c.JSON(http.StatusBadRequest, Response{Code: 400, Message: service.ErrDashboardRange.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	stats, err := h.userService.GetDashboardStats(days)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    500,

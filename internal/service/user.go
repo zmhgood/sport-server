@@ -261,14 +261,6 @@ func (s *UserService) DeleteComment(id uint) error {
 	return s.commentRepo.Delete(id)
 }
 
-// DashboardStats 仪表盘统计
-type DashboardStats struct {
-	UserCount        int64 `json:"userCount"`
-	ExerciseCount    int64 `json:"exerciseCount"`
-	CommentCount     int64 `json:"commentCount"`
-	TodayRecordCount int64 `json:"todayRecordCount"`
-}
-
 // WeekStatsResult 周统计结果
 type WeekStatsResult struct {
 	Stats      []DailyStat `json:"stats"`
@@ -401,21 +393,6 @@ type DailyStat struct {
 	GoalID      uint   `json:"goalId"`
 	GoalName    string `json:"goalName"`
 	GoalIDs     []uint `json:"goalIds"` // 当天参与的所有目标ID
-}
-
-// GetDashboardStats 获取仪表盘统计
-func (s *UserService) GetDashboardStats() (*DashboardStats, error) {
-	userCount, _ := s.userRepo.Count()
-	exerciseCount, _ := s.exerciseRepo.Count()
-	commentCount, _ := s.commentRepo.Count()
-	todayRecordCount, _ := s.exerciseRepo.GetTodayAllUsersExerciseCount()
-
-	return &DashboardStats{
-		UserCount:        userCount,
-		ExerciseCount:    exerciseCount,
-		CommentCount:     commentCount,
-		TodayRecordCount: todayRecordCount,
-	}, nil
 }
 
 func (s *UserService) GetFamilyStatistics(userID uint) ([]repository.FamilyStatistics, error) {
