@@ -91,6 +91,17 @@ func TestDashboardHTTPPermissionsRangesAndFailure(t *testing.T) {
 		if body.Code != 0 || body.Data.Days != tc.days || len(body.Data.DailyActivity) != tc.days || body.Data.TimeZone != "Asia/Shanghai" || body.Data.HotExercises == nil || w.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("dashboard response contract failed")
 		}
+		weeks := 1
+		if tc.days == 30 {
+			weeks = 4
+		}
+		e := body.Data.Engagement
+		if len(e.Families.Daily) != tc.days || len(e.WeeklyExerciseDays) != weeks || len(e.WeeklyRetention) != weeks || e.Activation.StartDate == "" {
+			t.Fatal("engagement HTTP response contract failed")
+		}
+		if e.Activation.EligibleUsers == 0 && e.Activation.Rate != nil {
+			t.Fatal("empty cohort must serialize as null rate")
+		}
 	}
 	tx.Rollback()
 	w := call("?days=7", admin, 500)
